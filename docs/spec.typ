@@ -2,28 +2,28 @@
 #set heading(numbering: "1.")
 
 #set document(
-    title: [Specification],
-    author: "Alexander Paolini"
+  title: [Specification],
+  author: "Alexander Paolini",
 )
 
 #title()
 
 #rect(stroke: (left: 1pt))[
-    #pad(1em)[
-        ```
-        import std.IO;
+  #pad(1em)[
+    ```
+    import std.IO;
 
-        class Main 
+    class Main
+    {
+        main(): int
         {
-            main(): int 
-            {
-                IO.print("Hello, World!\n");
+            IO.print("Hello, World!\n");
 
-                return 0;
-            }
+            return 0;
         }
-        ```
-    ]
+    }
+    ```
+  ]
 ]
 
 The ROOPL language is a minimalist programming language by design, as it is an exercise to construct my first Source -> ASM compiler. A lot of choices in the design of ROOPL come from the COOL programming language, as well as early Java and C.
@@ -34,22 +34,22 @@ The ROOPL language is a minimalist programming language by design, as it is an e
 
 = General Structure
 
-The general structure of ROOPL is a self-enclosed `Main` class containing methods and properties. 
+The general structure of ROOPL is a self-enclosed `Main` class containing methods and properties.
 
 #figure(caption: "A hello world program.")[
-    ```roopl
-    import std.IO;
+  ```roopl
+  import std.IO;
 
-    class Main 
-    {
-        main(): int 
-        {
-            IO.print("Hello, World!\n");
+  class Main
+  {
+      main(): int
+      {
+          IO.print("Hello, World!\n");
 
-            return 0;
-        }
-    }
-    ```
+          return 0;
+      }
+  }
+  ```
 ]
 
 Note how:
@@ -65,74 +65,74 @@ Note how:
 === FizzBuzz
 
 #figure(caption: "A FizzBuzz example.")[
-    ```roopl
-    import std.IO;
+  ```roopl
+  import std.IO;
 
-    class Main 
-    {
-        main(): int 
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                if (i % 5 == 0 && i % 3 == 0) IO.print("FizzBuzz\n");
-                else if (i % 5 == 0) IO.print("Fizz\n");
-                else if (i % 3 == 0) IO.print("Buzz\n");
-            }
+  class Main
+  {
+      main(): int
+      {
+          for (int i = 0; i < 5; i++)
+          {
+              if (i % 5 == 0 && i % 3 == 0) IO.print("FizzBuzz\n");
+              else if (i % 5 == 0) IO.print("Fizz\n");
+              else if (i % 3 == 0) IO.print("Buzz\n");
+          }
 
-            return 0;
-        }
-    }
-    ```
+          return 0;
+      }
+  }
+  ```
 ]
 
 The FizzBuzz example briefly introduces the structure of for loops. ROOPL takes inspiration here from C and the C family of languages wherein a for loop is three statements separated by semicolons. The first statement being the setup; the second statement being the condition, and the third statement being the statement that runs after each iteration. [TODO: LINK THE LOOPING SECTION]
 
 We also get a glimpse into the some math with the MOD operator. In ROOPL, much of the math stays consistent to C. [TODO: LINK THE MATH SECTION]
 
-===  Fibonacci
+=== Fibonacci
 
 #figure(caption: "A Fibonacci example in ROOPL.")[
-    ```roopl
-    import std.IO;
+  ```roopl
+  import std.IO;
 
-    class Main 
-    {
-        main(): int 
-        {
-            int in = IO.getInt();
-            int out = fib(in);
+  class Main
+  {
+      main(): int
+      {
+          int in = IO.getInt();
+          int out = fib(in);
 
-            IO.print(String.from(out)->append("\n"));
+          IO.print(String.from(out)->append("\n"));
 
-            return 0;
-        }
+          return 0;
+      }
 
-        fib(int n): int 
-        {
-            if (n == 1) return 1;
-            if (n == 2) return 1;
-            return fib(n - 1) + fib(n - 2);
-        }
-    }
-    ```
+      fib(int n): int
+      {
+          if (n == 1) return 1;
+          if (n == 2) return 1;
+          return fib(n - 1) + fib(n - 2);
+      }
+  }
+  ```
 ]
 
-Clearly ROOPL supports reading from and writing to the standard in/out. The output method is only a `print` and as such must take a string. Because the `print` method only prints the given string to the standard out, we must append a `\n` to the end so that the cursor is moved to the next line. We will delve into the semantidcs of `.` versus `->` property accessing semantics later.
+Clearly ROOPL supports reading from and writing to the standard in/out. The output method is only a `print` and as such must take a string. Because the `print` method only prints the given string to the standard out, we must append a `\n` to the end so that the cursor is moved to the next line. We will delve into the semantics of `.` versus `->` property accessing semantics later.
 
 #pagebreak()
 
 = Classes
 
-ROOPL is an object oriented progamming language so everything is, unfortunately, wrapped in a class. The main function must have its own class, and even helper/utility functions must also be contained within some class.
+ROOPL is an object oriented programming language so everything is, unfortunately, wrapped in a class. The main function must have its own class, and even helper/utility functions must also be contained within some class.
 
 Although this specification (yes THIS specification) is open to change, I opted to disregard any complex OOP properties and allow only for extension of classes. i.e. `class Square < Rectangle {}`, wherein the class `Square` is an subclass of `Rectangle` (and rectangle a superclass of square).
 
-An example implementaion of both of these classes:
+An example implementation of both of these classes:
 
 ```roopl
 import std.Math;
 
-class Rectangle 
+class Rectangle
 {
     width : int = 0;
     height : int = 0;
@@ -147,7 +147,7 @@ class Rectangle
     {
         this->width = width;
     }
-    
+
     setHeight(height: int): void
     {
         this->height = height;
@@ -165,7 +165,7 @@ class Square < Rectangle
     {
         super(side, 0);
     }
-    
+
     getSide(): int {
         return this->width;
     }
@@ -183,13 +183,100 @@ class Square < Rectangle
 
 Where `Square` is just a rectangle with the added `diagonal()` method that returns the length of the diagonal of the instantiated square.
 
-== Instantiated Classes as Reference Varibles
+== Properties of Objects
 
-A class, when instantiated, is treated as though it is a reference. This is more akin to how C might treat a reference to a struct. To access a method or property of a given object, we use the `->` operator. To access a method or property of a given class, we use the `.` operator. 
+Generally, objects can support properties. ROOPL respects this and thereby supports properties, as can be seen above.
 
-Basically, a static access is done using the `.` operator. For example, `IO.print()`; `Math.sqrt()`; `IO.getInt()`. Conversely, accessing a non-static member of an object is done using the `->` operator. For example: `rect->area()`; `rect->setWidth(100)`; and so on.
+Properties are of the form `NAME : TYPE (= VALUE);`. Even if declaration isn't required at this point, the compiler should error if a property is left undeclared at the completion of a constructor.
 
-Note that in the above examples, `this` is accessed using the `->` operator. As such, `this` is effectively an instance of the class and must be treated as a reference.
+An example of this is the Rectangle class.
+
+```
+class Rectangle
+{
+    width : int;
+    height : int;
+
+    Rectangle(width: int, height: int)
+    {
+        this->width = width;
+        this->height = height;
+    }
+
+    // ...
+}
+```
+
+Had the width and height not been set at the end of the execution of `Rectangle()`, then the compiler should error.
+
+As it stands, ROOPL has no property modifiers. This might be changed in the future.
+
+== Static and Non-Static Members
+
+Like any good language, ROOPL supports both static and non-static members. For example, `Math.sqrt(n)` calls the static `sqrt()` function attached to the `Math` class.
+
+By default, members are non-static and are thus attached to the instantiated object, and cannot be called using the class itself. I.e. `Square.diagonal()`, being non-static, cannot be called.
+
+Static members are declared using the following syntax:
+
+```roopl
+    // ...
+    static PROP : TYPE = VALUE;
+
+    static FN(): TYPE
+    {
+        // ...
+    }
+    //...
+```
+
+For instance, one could implement the following math class:
+
+```roopl
+class Math
+{
+    // ...
+    static PI: float = 3.1415
+    // ...
+
+    static abs (x: int): int
+    {
+        if (x > 0) return x;
+        return -x;
+    }
+    // ...
+}
+```
+
+#pagebreak()
+
+= Types
+
+Types in ROOPL are limited to 2 basic groups: primitives and classes.
+
+== Primitives
+
+Primitives in ROOPL are types in which are directly implemented and handled by the machine. We have, in order of increasing size/complexity, `boolean`, `char`, `int`, `float`.
+
+=== Boolean
+
+Booleans represent `true` or `false` values.
+
+=== Char
+
+Chars represent UTF-8 characters. This gives a total of 256 different values supported. Read more about UTF-8 #link("https://en.wikipedia.org/wiki/UTF-8")[here].
+
+=== Int
+
+Integers in ROOPL are 64 bit signed integers.
+
+=== Float
+
+Floating point numbers are 64 bits wide.
+
+=== The Future of Primitives
+
+Admittedly, there are few primitives supported. One might hope for double precision floats, or long integers, and so on. In order to keep the scope of this project smaller, I have opted to only include few primitives such that the language is still fully-featured.
 
 == Classes as Types
 
@@ -233,64 +320,85 @@ class SquarePrinter
 }
 ```
 
-== Properties of Objects
+=== Instantiated Classes as Reference Variables
 
-Generally, objects can support properties. ROOPL respects this and thereby supports properties, as can be seen above.
+A class, when instantiated, is treated as though it is a reference. This is more akin to how C might treat a reference to a struct. To access a method or property of a given object, we use the `->` operator. To access a method or property of a given class, we use the `.` operator.
 
-Properties are of the form `NAME : TYPE (= VALUE);`. Even if declaration isn't required at this point, the compiler should error if a property is left undeclared at the completion of a constructor.
+Basically, a static access is done using the `.` operator. For example, `IO.print()`; `Math.sqrt()`; `IO.getInt()`. Conversely, accessing a non-static member of an object is done using the `->` operator. For example: `rect->area()`; `rect->setWidth(100)`; and so on.
 
-An example of this is the Rectangle class.
-
-```
-class Rectangle 
-{
-    width : int;
-    height : int;
-
-    Rectangle(width: int, height: int)
-    {
-        this->width = width;
-        this->height = height;
-    }
-
-    // ...
-}
-```
-
-Had the width and height not been set at the end of the execution of `Rectangle()`, then the compiler should error.
-
-As it stands, ROOPL has no property modifiers. This might be changed in the future.
+Note that in the above examples, `this` is accessed using the `->` operator. As such, `this` is effectively an instance of the class and must be treated as a reference.
 
 #pagebreak()
 
-= Primitives
+= Variables
 
-Primitives in ROOPL are limited to a few data types. We have, in order of increasing size/complexity, `boolean`, `char`, `int`, `float`.
+Roopl definitely supports variable declarations, as can be seen in different examples up until this point.
 
-== Boolean
+Standard declarations are in the form `TYPE NAME = VALUE;`.
 
-Booleans represent `true` or `false` values. 
+For example,
 
-== Char
+```roopl
+// ...
+int x = 5;
+Rectangle test = Rectangle(5, 3);
+// ...
+```
 
-Chars represent UTF-8 characters. This gives a total of 256 different values supported. Read more about UTF-8 #link("https://en.wikipedia.org/wiki/UTF-8")[here].
+== Mutations
 
-== Int
+Mutating variables, is quite simple. They can be overwritten directly. Here is an example:
 
-Intgers in ROOPL are 64 bit signed integers.
+```roopl
+int x = 5;
+x = 5;
+```
 
-== Float
+And an example with objects:
 
-Floating point numbers are 64 bits wide.
+```roopl
+Rectangle r1 = Rectangle(5, 3);
+r1 = Rectangle(4, 5);
+```
 
-== The Future of Primitives
+It must be noted that variables do maintain their type and cannot be overwritten with new types. This means the following block does not compile. 
 
-Admitedly, there are few primatives supported. One might hope for double precision floats, or long integers, and so on. In order to keep the scope of this project smaller, I have opted to only include few primatives such that the language is still fully-featured.
+```roopl
+int x = 5;
+x = Square(5);
+```
+
+#pagebreak()
+
+= Miscellaneous Features
+
+== Comments
+
+Comments in ROOPL are limited to single line, C-like double forward slash comments.
+
+```roopl
+// this is a comment
+```
+
+A comment eats all of the characters until the next newline `\n` character. Thus, a comment can be be at the end of a line, or at the very beginning.
+
+```roopl
+// This is the Main class
+class Main
+{
+    main(): int // This is the main function
+    {
+        // This is the return statement.
+        return 0;
+    }
+}
+```
 
 #pagebreak()
 
 #set heading(numbering: "A.1")
 #counter(heading).update(0)
+
 = Appendix
 
 == EBNF
