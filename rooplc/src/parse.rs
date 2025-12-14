@@ -53,15 +53,15 @@ impl Parser {
 
         let mut path = Vec::new();
 
-        let first = self.expect(TokenKind::Identifier)?;
-        path.push(first.content.clone().unwrap());
+        let first = self.expect(TokenKind::Identifier)?.content.unwrap();
+        path.push(first);
 
         while let Some(tok) = self.peek() {
             match tok.kind {
                 TokenKind::Dot => {
-                    self.consume();
-                    let next_id = self.expect(TokenKind::Identifier)?;
-                    path.push(next_id.content.clone().unwrap());
+                    self.expect(TokenKind::Dot)?;
+                    let nid = self.expect(TokenKind::Identifier)?.content.unwrap();
+                    path.push(nid);
                 }
                 _ => break,
             }
@@ -76,13 +76,10 @@ impl Parser {
         self.expect(TokenKind::Class)?;
 
         let mut class_decl = ClassDecl {
-            name: String::new(),
+            name: self.expect(TokenKind::Identifier)?.content.unwrap(),
             base: None,
             members: Vec::new(),
         };
-
-        let ntok: Result<Token, ParseError> = self.expect(TokenKind::Identifier);
-        class_decl.name = ntok.unwrap().content.unwrap();
 
         if let Some(etok) = self.peek() {
             if etok.kind == TokenKind::LessThan {
