@@ -136,6 +136,14 @@ impl Lexer {
                         self.emit(TokenKind::Slash, start, 1);
                     }
                 }
+                '!' => {
+                    if self.peek_next() == Some('=') {
+                        self.advance_n(2);
+                        self.emit(TokenKind::BangEquals, start, 2);
+                    } else {
+                        self.emit(TokenKind::Bang, start, 1);
+                    }
+                }
                 '"' => {
                     self.advance();
                     while let Some(next) = self.peek() {
@@ -194,7 +202,14 @@ impl Lexer {
                         self.emit(TokenKind::GreaterThan, start, 1);
                     }
                 }
-                '=' => self.emit(TokenKind::Equals, start, 1),
+                '=' => {
+                    if self.peek_next() == Some('=') {
+                        self.advance_n(2);
+                        self.emit(TokenKind::EqualsEquals, start, 2);
+                    } else {
+                        self.emit(TokenKind::Equals, start, 1);
+                    }
+                }
                 _ => self.emit(TokenKind::InvalidToken, start, 1),
             }
             self.advance();
