@@ -158,6 +158,11 @@ class Rectangle
         return width * height;
     }
 }
+```
+
+```
+import std.Math;
+import Rectangle;
 
 class Square < Rectangle
 {
@@ -361,7 +366,7 @@ Rectangle r1 = Rectangle(5, 3);
 r1 = Rectangle(4, 5);
 ```
 
-It must be noted that variables do maintain their type and cannot be overwritten with new types. This means the following block does not compile. 
+It must be noted that variables do maintain their type and cannot be overwritten with new types. This means the following block does not compile.
 
 ```roopl
 int x = 5;
