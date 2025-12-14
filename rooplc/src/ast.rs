@@ -1,4 +1,6 @@
-use crate::token::{Token, TokenKind};
+use std::fmt;
+
+use crate::token::TokenKind;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -149,12 +151,102 @@ pub enum Stmt {
 
     Return(Option<Expr>),
 
-    ExprStmt(Expr),
+    Expr(Expr),
 }
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken { expected: TokenKind, found: TokenKind },
+    UnexpectedToken {
+        expected: TokenKind,
+        found: TokenKind,
+    },
     EndOfInput,
     InvalidExpression,
+    NotImplemented,
+}
+
+fn indent_lines(s: &str, indent: &str) -> String {
+    s.lines()
+        .map(|line| format!("{}{}", indent, line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+impl fmt::Display for Program {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Program")?;
+        for item in &self.items {
+            let item_str = format!("{item}");
+            writeln!(f, "{}", indent_lines(&item_str, "  "))?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Item {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Item::Import(import_stmt) => write!(f, "{}", import_stmt),
+            Item::Class(class_decl) => write!(f, "{}", class_decl),
+        }
+    }
+}
+
+impl fmt::Display for ClassDecl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "Class {}{}",
+            self.name,
+            self.base
+                .as_ref()
+                .map_or(String::new(), |base| format!(" (extends {})", base))
+        )?;
+        for member in &self.members {
+            let member_str = format!("{}", member);
+            writeln!(f, "{}", indent_lines(&member_str, "  "))?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for ImportStmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Import {}", self.path.join("."))
+    }
+}
+
+impl fmt::Display for ClassMember {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClassMember::Property {
+                name,
+                ty,
+                initializer,
+            } => {
+                write!(f, "{}: {:?}", name, ty)?;
+                if let Some(init) = initializer {
+                    write!(f, " = {:?}", init)?;
+                }
+                Ok(())
+            }
+            ClassMember::Method {
+                name,
+                params,
+                return_type,
+                body,
+            } => {
+                write!(f, "Method {}(", name)?;
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {:?}", param.name, param.ty)?;
+                }
+                writeln!(f, ") -> {:?} {{", return_type)?;
+                write!(f, "{}", indent_lines(&format!("{:?}", body), "  "))?;
+                writeln!(f, "}}")
+            }
+        }
+    }
 }
