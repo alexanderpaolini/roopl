@@ -34,10 +34,10 @@ impl Lexer {
     }
 
     fn emit(&mut self, kind: TokenKind, start: i32, len: i32) {
-        self.emit_content(kind, start, len, "".to_string());
+        self.emit_content(kind, start, len, None);
     }
 
-    fn emit_content(&mut self, kind: TokenKind, start: i32, len: i32, content: String) {
+    fn emit_content(&mut self, kind: TokenKind, start: i32, len: i32, content: Option<String>) {
         self.tokens.push(Token {
             kind,
             pos: Position { idx: start, len },
@@ -70,11 +70,14 @@ impl Lexer {
                     break;
                 }
 
-                let content: String = self.input[start as usize..(self.idx as usize)]
-                    .iter()
-                    .collect();
+                let content: String = self.input[start as usize..self.idx].iter().collect();
 
-                self.emit_content(TokenKind::Number, start, self.idx as i32 - start, content);
+                self.emit_content(
+                    TokenKind::Number,
+                    start,
+                    self.idx as i32 - start,
+                    Some(content),
+                );
 
                 continue;
             }
@@ -100,10 +103,8 @@ impl Lexer {
                 };
 
                 if kind == TokenKind::Identifier {
-                    let content: String = self.input[start as usize..(self.idx as usize)]
-                        .iter()
-                        .collect();
-                    self.emit_content(kind, start, self.idx as i32 - start, content);
+                    let content: String = self.input[start as usize..self.idx].iter().collect();
+                    self.emit_content(kind, start, self.idx as i32 - start, Some(content));
                 } else {
                     self.emit(kind, start, self.idx as i32 - start);
                 }
@@ -143,14 +144,13 @@ impl Lexer {
                         }
                         self.advance();
                     }
-                    let content: String = self.input[(start + 1) as usize..(self.idx as usize)]
-                        .iter()
-                        .collect();
+                    let content: String =
+                        self.input[(start + 1) as usize..self.idx].iter().collect();
                     self.emit_content(
                         TokenKind::String,
                         start,
                         self.idx as i32 - start - 1,
-                        content,
+                        Some(content),
                     );
                 }
                 ':' => self.emit(TokenKind::Colon, start, 1),
@@ -200,7 +200,7 @@ impl Lexer {
             self.advance();
         }
 
-        self.emit(TokenKind::EOF, self.idx as i32, 0);
+        self.emit(TokenKind::EoF, self.idx as i32, 0);
         self.tokens
     }
 }
@@ -216,14 +216,14 @@ mod tests {
     #[test]
     fn test_empty_input() {
         let toks = lex("".to_string());
-        assert_eq!(toks[0].kind, TokenKind::EOF);
+        assert_eq!(toks[0].kind, TokenKind::EoF);
     }
 
     #[test]
     fn test_string() {
         let toks = lex("\"str\"".to_string());
         assert_eq!(toks[0].kind, TokenKind::String);
-        assert_eq!(toks[0].content, "str");
+        assert_eq!(toks[0].content, Some("str".to_string()));
         assert_eq!(toks[0].pos.idx, 0);
         assert_eq!(toks[0].pos.len, 3);
     }
@@ -232,7 +232,7 @@ mod tests {
     fn test_string_without_end() {
         let toks = lex("\"str".to_string());
         assert_eq!(toks[0].kind, TokenKind::String);
-        assert_eq!(toks[0].content, "str");
+        assert_eq!(toks[0].content, Some("str".to_string()));
         assert_eq!(toks[0].pos.idx, 0);
         assert_eq!(toks[0].pos.len, 3);
     }
@@ -241,7 +241,7 @@ mod tests {
     fn test_string_without_end_and_more() {
         let toks = lex("String s = \"str".to_string());
         assert_eq!(toks[3].kind, TokenKind::String);
-        assert_eq!(toks[3].content, "str");
+        assert_eq!(toks[3].content, Some("str".to_string()));
         assert_eq!(toks[3].pos.idx, 11);
         assert_eq!(toks[3].pos.len, 3);
     }
@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(toks[1].kind, TokenKind::Identifier);
         assert_eq!(toks[1].pos.idx, 6);
         assert_eq!(toks[1].pos.len, 4);
-        assert_eq!(toks[1].content, "Main");
+        assert_eq!(toks[1].content, Some("Main".to_string()));
 
         assert_eq!(toks[2].kind, TokenKind::LeftBracket);
         assert_eq!(toks[2].pos.idx, 11);
