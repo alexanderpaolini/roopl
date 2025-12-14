@@ -12,6 +12,7 @@ pub enum TokenKind {
     Plus,
     Star,
     Slash,
+    Comma,
     Bang,
     BangEquals,
     Equals,

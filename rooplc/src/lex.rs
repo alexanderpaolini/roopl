@@ -121,6 +121,7 @@ impl Lexer {
                         self.emit(TokenKind::Minus, start, 1);
                     }
                 }
+                ',' => self.emit(TokenKind::Comma, start, 1),
                 '*' => self.emit(TokenKind::Star, start, 1),
                 '/' => {
                     if self.peek_next() == Some('/') {
@@ -131,7 +132,7 @@ impl Lexer {
                             }
                             self.advance();
                         }
-                        self.emit(TokenKind::Comment, start, self.idx as i32 - start);
+                        // self.emit(TokenKind::Comment, start, self.idx as i32 - start);
                     } else {
                         self.emit(TokenKind::Slash, start, 1);
                     }
