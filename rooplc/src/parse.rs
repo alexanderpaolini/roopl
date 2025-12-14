@@ -84,8 +84,7 @@ impl Parser {
         if let Some(etok) = self.peek() {
             if etok.kind == TokenKind::LessThan {
                 self.expect(TokenKind::LessThan)?;
-                class_decl.base =
-                    Some(self.expect(TokenKind::Identifier).unwrap().content.unwrap());
+                class_decl.base = Some(self.expect(TokenKind::Identifier)?.content.unwrap());
             }
         }
 
