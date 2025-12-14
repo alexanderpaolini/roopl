@@ -1,11 +1,12 @@
 use std::fmt;
 
+#[derive(Clone)]
 pub struct Position {
     pub idx: i32,
     pub len: i32,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     Minus,
     Plus,
@@ -39,7 +40,7 @@ pub enum TokenKind {
     While,
     For,
     Identifier,
-    EOF,
+    EoF,
     Number,
     String,
     InvalidToken,
@@ -51,10 +52,11 @@ impl fmt::Display for TokenKind {
     }
 }
 
+#[derive(Clone)]
 pub struct Token {
     pub pos: Position,
     pub kind: TokenKind,
-    pub content: String,
+    pub content: Option<String>,
 }
 
 impl fmt::Display for Token {
@@ -66,7 +68,7 @@ impl fmt::Display for Token {
             self.pos.idx + self.pos.len,
             self.pos.len,
             self.kind,
-            self.content
+            self.content.as_deref().unwrap_or(""),
         )
     }
 }
