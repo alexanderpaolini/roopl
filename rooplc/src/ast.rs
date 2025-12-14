@@ -92,12 +92,14 @@ pub enum ClassMember {
         name: String,
         ty: Type,
         initializer: Option<Expr>,
+        is_static: bool,
     },
     Method {
         name: String,
         params: Vec<Parameter>,
         return_type: Type,
         body: Block,
+        is_static: bool,
     },
 }
 
@@ -223,8 +225,12 @@ impl fmt::Display for ClassMember {
                 name,
                 ty,
                 initializer,
+                is_static,
             } => {
-                write!(f, "{}: {:?}", name, ty)?;
+                if *is_static {
+                    write!(f, "static ")?;
+                }
+                write!(f, "{} : {:?}", name, ty)?;
                 if let Some(init) = initializer {
                     write!(f, " = {:?}", init)?;
                 }
@@ -235,17 +241,20 @@ impl fmt::Display for ClassMember {
                 params,
                 return_type,
                 body,
+                is_static,
             } => {
-                write!(f, "Method {}(", name)?;
+                if *is_static {
+                    write!(f, "static ")?;
+                }
+                write!(f, "{} (", name)?;
                 for (i, param) in params.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}: {:?}", param.name, param.ty)?;
                 }
-                writeln!(f, ") -> {:?} {{", return_type)?;
-                write!(f, "{}", indent_lines(&format!("{:?}", body), "  "))?;
-                writeln!(f, "}}")
+                writeln!(f, ") : {:?} ", return_type)?;
+                writeln!(f, "{}", indent_lines(&format!("{:?}", body), "  "))
             }
         }
     }
