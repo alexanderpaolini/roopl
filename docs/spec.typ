@@ -429,8 +429,7 @@ class_decl  = "class" , identifier , [ inheritance ] ,
 inheritance = "<" , identifier ;
 
 class_member
-            = property_decl
-            | method_decl ;
+            = [ "static" ] , ( property_decl | method_decl ) ;
 
 property_decl
             = identifier , ":" , type ,
