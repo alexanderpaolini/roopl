@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::token::TokenKind;
+use crate::token::{Token, TokenKind};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -98,7 +98,7 @@ pub enum ClassMember {
         name: String,
         params: Vec<Parameter>,
         return_type: Type,
-        body: Block,
+        body: Stmt,
         is_static: bool,
     },
 }
@@ -158,10 +158,7 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken {
-        expected: TokenKind,
-        found: TokenKind,
-    },
+    UnexpectedToken { expected: TokenKind, found: Token },
     EndOfInput,
     InvalidExpression,
     NotImplemented,
@@ -254,8 +251,102 @@ impl fmt::Display for ClassMember {
                     write!(f, "{}: {:?}", param.name, param.ty)?;
                 }
                 writeln!(f, ") : {:?} ", return_type)?;
-                writeln!(f, "{}", indent_lines(&format!("{:?}", body), "  "))
+                writeln!(f, "{}", indent_lines(&format!("{}", body), "  "))
             }
+        }
+    }
+}
+
+impl fmt::Display for Stmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Stmt::Block(block) => {
+                writeln!(f, "Block")?;
+                write!(f, "{}", block)
+            }
+            Stmt::VarDecl {
+                ty,
+                name,
+                initializer,
+            } => {
+                write!(f, "{} : {:?}", name, ty)?;
+                if let Some(init) = initializer {
+                    write!(f, " = {}", init)?;
+                }
+                writeln!(f, "")
+            }
+            Stmt::Assignment { target, value } => {
+                writeln!(f, "{} = {}", target, value)
+            }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                writeln!(f, "if {}", condition)?;
+                let then_str = format!("{}", then_branch);
+                writeln!(f, "{}", indent_lines(&then_str, "  "))?;
+                if let Some(else_branch) = else_branch {
+                    writeln!(f, "else")?;
+                    let else_str = format!("{}", else_branch);
+                    writeln!(f, "{}", indent_lines(&else_str, "  "))?;
+                }
+                Ok(())
+            }
+            Stmt::For {
+                init,
+                condition,
+                update,
+                body,
+            } => {
+                writeln!(f, "for")?;
+                if let Some(init_stmt) = init {
+                    let init_str = format!("{}", init_stmt);
+                    writeln!(f, "{}", indent_lines(&init_str, "  "))?;
+                }
+                let cond_str = format!("{}", condition);
+                writeln!(f, "{}", indent_lines(&cond_str, "  "))?;
+                if let Some(update_stmt) = update {
+                    let update_str = format!("{}", update_stmt);
+                    writeln!(f, "{}", indent_lines(&update_str, "  "))?;
+                }
+                let body_str = format!("{}", body);
+                writeln!(f, "{}", indent_lines(&body_str, "    "))
+            }
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for stmt in &self.stmts {
+            let stmt_str = format!("{}", stmt);
+            writeln!(f, "{}", indent_lines(&stmt_str, "  "))?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Literal(literal) => write!(f, "{:?}", literal),
+            Expr::Variable(name) => write!(f, "{}", name),
+            Expr::Unary { op, expr } => write!(f, "({:?} {})", op, expr),
+            Expr::Binary { left, op, right } => write!(f, "({} {:?} {})", left, op, right),
+            Expr::Grouping(expr) => write!(f, "(group {})", expr),
+            Expr::Call { callee, args } => {
+                write!(f, "{}(", callee)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                }
+                write!(f, ")")
+            }
+            Expr::Access { object, field } => write!(f, "{}.{}", object, field),
         }
     }
 }

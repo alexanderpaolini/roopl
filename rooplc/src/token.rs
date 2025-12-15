@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Position {
     pub idx: i32,
     pub len: i32,
@@ -17,7 +17,7 @@ pub enum TokenKind {
     BangEquals,
     Equals,
     EqualsEquals,
-    Comment,
+    // Comment,
     Percent,
     SemiColon,
     Colon,
@@ -56,7 +56,7 @@ impl fmt::Display for TokenKind {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub pos: Position,
     pub kind: TokenKind,

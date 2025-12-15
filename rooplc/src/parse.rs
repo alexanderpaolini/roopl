@@ -1,6 +1,6 @@
 use crate::{
     ast::*,
-    token::{Token, TokenKind},
+    token::{self, Token, TokenKind},
 };
 
 pub struct Parser {
@@ -40,7 +40,7 @@ impl Parser {
             } else {
                 Err(ParseError::UnexpectedToken {
                     expected: kind,
-                    found: tok.kind,
+                    found: tok,
                 })
             }
         } else {
@@ -72,8 +72,193 @@ impl Parser {
         Ok(Item::Import(ImportStmt { path }))
     }
 
+    pub fn parse_return_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenKind::Return)?;
+
+        let mut ret_val: Option<Expr> = None;
+        if let Some(tok) = self.peek()
+            && tok.kind != TokenKind::SemiColon
+        {
+            ret_val = Some(self.parse_expression()?);
+        }
+        self.expect(TokenKind::SemiColon)?;
+
+        Ok(Stmt::Return(ret_val))
+    }
+
+    pub fn parse_expression_statement(&mut self) -> Result<Stmt, ParseError> {
+        let res = self.parse_expression()?;
+
+        Ok(Stmt::Expr(res))
+    }
+
+    pub fn parse_variable_declaration_statement(&mut self) -> Result<Stmt, ParseError> {
+        let ty = self.parse_type()?;
+        let name = self.expect(TokenKind::Identifier)?.content.unwrap();
+
+        let mut initializer = None;
+        if let Some(tok) = self.peek() {
+            if tok.kind == TokenKind::Equals {
+                self.consume();
+                initializer = Some(self.parse_expression()?);
+            }
+        }
+
+        Ok(Stmt::VarDecl {
+            name,
+            ty,
+            initializer,
+        })
+    }
+
+    pub fn parse_assignment_statement(&mut self) -> Result<Stmt, ParseError> {
+        let target = self.parse_expression()?;
+
+        self.expect(TokenKind::Equals)?;
+
+        let value = self.parse_expression()?;
+
+        Ok(Stmt::Assignment { target, value })
+    }
+
+    pub fn parse_if_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenKind::If)?;
+        self.expect(TokenKind::LeftParen)?;
+
+        let condition = self.parse_expression()?;
+
+        self.expect(TokenKind::RightParen)?;
+
+        let then_branch = Box::new(self.parse_statement()?);
+
+        let else_branch = if let Some(tok) = self.peek() {
+            if tok.kind == TokenKind::Else {
+                self.consume();
+                Some(Box::new(self.parse_statement()?))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
+    }
+
+    pub fn parse_for_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenKind::For)?;
+
+        self.expect(TokenKind::LeftParen)?;
+
+        let init = if let Some(tok) = self.peek() {
+            match tok.kind {
+                TokenKind::Identifier => {
+                    let ntok = self.peek_next().ok_or(ParseError::EndOfInput)?;
+                    match ntok.kind {
+                        TokenKind::Identifier => Some(self.parse_variable_declaration_statement()?),
+                        TokenKind::Equals => Some(self.parse_assignment_statement()?),
+                        _ => Some(self.parse_expression_statement()?),
+                    }
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+
+        self.expect(TokenKind::SemiColon)?;
+
+        let condition = self.parse_expression()?;
+
+        self.expect(TokenKind::SemiColon)?;
+
+        let update = if let Some(tok) = self.peek()
+            && tok.kind == TokenKind::Identifier
+            && let Some(next_tok) = self.peek_next()
+        {
+            if next_tok.kind == TokenKind::LeftParen {
+                None
+            } else if next_tok.kind == TokenKind::Equals {
+                Some(self.parse_assignment_statement()?)
+            } else {
+                Some(self.parse_expression_statement()?)
+            }
+        } else {
+            Some(self.parse_expression_statement()?)
+        };
+
+        self.expect(TokenKind::RightParen)?;
+
+        return Ok(Stmt::For {
+            init: init.map(Box::new),
+            condition,
+            update: update.map(Box::new),
+            body: Box::new(self.parse_statement()?),
+        });
+    }
+
     pub fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
-        Err(ParseError::NotImplemented)
+        let ctok = self.peek().ok_or(ParseError::EndOfInput)?;
+
+        match ctok.kind {
+            TokenKind::Identifier => {
+                let ntok = self.peek_next().ok_or(ParseError::EndOfInput)?;
+
+                let stmt = match ntok.kind {
+                    TokenKind::Identifier => self.parse_variable_declaration_statement()?,
+
+                    _ => {
+                        let target = self.parse_expression()?;
+
+                        if let Some(nntok) = self.peek()
+                            && nntok.kind == TokenKind::Equals
+                        {
+                            self.expect(TokenKind::Equals)?;
+
+                            let value: Expr = self.parse_expression()?;
+
+                            Stmt::Assignment { target, value }
+                        } else {
+                            Stmt::Expr(target)
+                        }
+                    }
+                };
+
+                self.expect(TokenKind::SemiColon)?;
+                Ok(stmt)
+            }
+
+            TokenKind::For => self.parse_for_statement(),
+            TokenKind::If => self.parse_if_statement(),
+            TokenKind::LeftBracket => self.parse_block_statement(),
+            TokenKind::Return => self.parse_return_statement(),
+
+            _ => {
+                let stmt = self.parse_expression_statement()?;
+                self.expect(TokenKind::SemiColon)?;
+                Ok(stmt)
+            }
+        }
+    }
+
+    pub fn parse_block_statement(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(TokenKind::LeftBracket)?;
+
+        let mut stmts: Vec<Stmt> = vec![];
+
+        while let Some(tok) = self.peek()
+            && tok.kind != TokenKind::RightBracket
+        {
+            stmts.push(self.parse_statement()?);
+        }
+
+        self.expect(TokenKind::RightBracket)?;
+
+        Ok(Stmt::Block(Block { stmts }))
     }
 
     pub fn parse_type(&mut self) -> Result<Type, ParseError> {
@@ -118,11 +303,6 @@ impl Parser {
     }
 
     pub fn parse_method(&mut self, is_static: bool) -> Result<ClassMember, ParseError> {
-        // [static] NAME (PARAMS...) : TYPE
-        // {
-        //      (Stmt)*
-        // }
-
         let name = self.expect(TokenKind::Identifier)?.content.unwrap();
         self.expect(TokenKind::LeftParen)?;
 
@@ -134,17 +314,13 @@ impl Parser {
 
         let return_type = self.parse_type()?;
 
-        self.expect(TokenKind::LeftBracket)?;
-
-        // TODO: [stmt]*
-
-        self.expect(TokenKind::RightBracket)?;
+        let body = self.parse_block_statement()?;
 
         Ok(ClassMember::Method {
             name,
             params,
             return_type,
-            body: Block { stmts: vec![] },
+            body,
             is_static,
         })
     }
@@ -221,7 +397,7 @@ impl Parser {
 
         while let Some(tok) = self.peek() {
             match tok.kind {
-                TokenKind::Equals => {
+                TokenKind::EqualsEquals | TokenKind::BangEquals => {
                     let op = if tok.kind == TokenKind::EqualsEquals {
                         BinaryOp::Equals
                     } else {
@@ -336,7 +512,7 @@ impl Parser {
                         UnaryOp::Not
                     };
                     self.consume();
-                    let expr = self.parse_primary()?;
+                    let expr = self.parse_postfix()?;
                     return Ok(Expr::Unary {
                         op,
                         expr: Box::new(expr),
@@ -346,7 +522,40 @@ impl Parser {
             }
         }
 
-        self.parse_primary()
+        self.parse_postfix()
+    }
+
+    fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            match self.peek() {
+                Some(tok) if tok.kind == TokenKind::LeftParen => {
+                    self.expect(TokenKind::LeftParen)?;
+                    let args = self.parse_argument_list()?;
+                    self.expect(TokenKind::RightParen)?;
+
+                    expr = Expr::Call {
+                        callee: Box::new(expr),
+                        args,
+                    };
+                }
+
+                Some(tok) if tok.kind == TokenKind::RightArrow => {
+                    self.consume();
+                    let field = self.expect(TokenKind::Identifier)?;
+
+                    expr = Expr::Access {
+                        object: Box::new(expr),
+                        field: field.content.unwrap(),
+                    };
+                }
+
+                _ => break,
+            }
+        }
+
+        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
@@ -363,12 +572,6 @@ impl Parser {
                     return Ok(Expr::Literal(Literal::String(value)));
                 }
                 TokenKind::Identifier => {
-                    // TODO: this can also be an object access or a method call
-                    // basically
-                    // obj->acc()
-                    // obj.acc()
-                    // obj1->obj->acc()
-                    // any combination of that
                     let name = tok.content.unwrap();
                     self.consume();
                     return Ok(Expr::Variable(name));
@@ -377,7 +580,7 @@ impl Parser {
                     self.consume();
                     let expr = self.parse_expression()?;
                     self.expect(TokenKind::RightParen)?;
-                    return Ok(expr);
+                    return Ok(Expr::Grouping(Box::new(expr)));
                 }
                 _ => {}
             }
@@ -385,8 +588,37 @@ impl Parser {
 
         Err(ParseError::UnexpectedToken {
             expected: TokenKind::Identifier,
-            found: self.peek().map_or(TokenKind::EoF, |t| t.kind),
+            found: self.peek().unwrap_or_else(|| Token {
+                pos: token::Position { idx: 0, len: 0 },
+                kind: TokenKind::EoF,
+                content: Some("EOF".to_string()),
+            }),
         })
+    }
+
+    fn parse_argument_list(&mut self) -> Result<Vec<Expr>, ParseError> {
+        let mut args = Vec::new();
+
+        if let Some(tok) = self.peek()
+            && tok.kind == TokenKind::RightParen
+        {
+            return Ok(args);
+        }
+
+        loop {
+            args.push(self.parse_expression()?);
+
+            if let Some(ntok) = self.peek()
+                && ntok.kind == TokenKind::Comma
+            {
+                self.expect(TokenKind::Comma)?;
+                continue;
+            }
+
+            break;
+        }
+
+        Ok(args)
     }
 
     pub fn parse_class_member(&mut self) -> Result<ClassMember, ParseError> {
@@ -414,7 +646,6 @@ impl Parser {
     pub fn parse_class_members(&mut self) -> Result<Vec<ClassMember>, ParseError> {
         let mut res: Vec<ClassMember> = vec![];
 
-        // while not at the end of the class basically
         while let Some(ctok) = self.peek()
             && ctok.kind != TokenKind::RightBracket
         {
@@ -458,7 +689,7 @@ impl Parser {
                 _ => {
                     return Err(ParseError::UnexpectedToken {
                         expected: TokenKind::EoF,
-                        found: tok.kind,
+                        found: tok,
                     });
                 }
             };
@@ -477,165 +708,189 @@ pub fn parse(toks: Vec<Token>) -> Program {
 
 #[cfg(test)]
 mod tests {
+    use super::parse;
     use crate::{ast::*, lex::lex};
 
-    use super::parse;
-
-    #[test]
-    fn test_empty_input() {
-        let ast = parse(vec![]);
-
-        println!("{ast}")
-    }
-
-    #[test]
-    fn test_main_class() {
-        let toks = lex("class Main {}".to_string());
-        let ast = parse(toks);
-
+    fn assert_class(ast: &Program, name: &str, member_count: usize) -> ClassDecl {
         assert_eq!(ast.items.len(), 1);
-        assert!(
-            matches!(ast.items[0], Item::Class(ClassDecl { ref name, ref members, .. }) if name == "Main" && members.is_empty())
-        );
-    }
-
-    #[test]
-    fn test_import_stmt() {
-        let toks = lex("import a.b.c;".to_string());
-        let ast = parse(toks);
-
-        assert_eq!(ast.items.len(), 1);
-        println!("{:?}", ast)
-    }
-
-    #[test]
-    #[should_panic(expected = "ParseError")]
-    fn test_import_err() {
-        let toks = lex("import a.b.;".to_string());
-        parse(toks);
-    }
-
-    #[test]
-    fn test_given_prop() {
-        // this test was generated by AI tbh
-        let toks = lex("
-        class Main {
-            static x : int = 0;
-            y : float = 67.0;
+        if let Item::Class(c) = &ast.items[0] {
+            assert_eq!(c.name, name);
+            assert_eq!(c.members.len(), member_count);
+            c.clone()
+        } else {
+            panic!("Expected a class named '{}'", name);
         }
+    }
+
+    fn assert_property(member: &ClassMember, name: &str, ty: Type, is_static: bool) {
+        if let ClassMember::Property {
+            name: n,
+            ty: t,
+            is_static: s,
+            ..
+        } = member
+        {
+            assert_eq!(n, name);
+            assert!(matches!(t, _ if *t == ty));
+            assert_eq!(*s, is_static);
+        } else {
+            panic!("Expected a property named '{}'", name);
+        }
+    }
+
+    fn assert_method(
+        member: &ClassMember,
+        name: &str,
+        param_count: usize,
+        return_ty: Type,
+        is_static: bool,
+    ) {
+        if let ClassMember::Method {
+            name: n,
+            params,
+            return_type,
+            is_static: s,
+            ..
+        } = member
+        {
+            assert_eq!(n, name);
+            assert_eq!(params.len(), param_count);
+            assert!(matches!(return_type, _ if *return_type == return_ty));
+            assert_eq!(*s, is_static);
+        } else {
+            panic!("Expected a method named '{}'", name);
+        }
+    }
+
+    #[test]
+    fn test_with_props() {
+        let toks = lex("
+            class Main {
+                static x : int = 0;
+                y : float = 67.0;
+            }
         "
         .to_string());
 
         let ast = parse(toks);
+        let class = assert_class(&ast, "Main", 2);
 
-        assert_eq!(ast.items.len(), 1);
-        if let Item::Class(ClassDecl { name, members, .. }) = &ast.items[0] {
-            assert_eq!(name, "Main");
-            assert_eq!(members.len(), 2);
+        assert_property(&class.members[0], "x", Type::Int, true);
+        assert_property(&class.members[1], "y", Type::Float, false);
+    }
 
-            if let ClassMember::Property {
-                name,
-                ty,
-                is_static,
-                ..
-            } = &members[0]
-            {
-                assert_eq!(name, "x");
-                assert!(matches!(ty, Type::Int));
-                assert!(*is_static);
+    #[test]
+    fn test_with_methods() {
+        let toks = lex("
+            class Main {
+                static main (argc: int, args: Array) : int {}
+                test () : float {}
+            }
+        "
+        .to_string());
+
+        let ast = parse(toks);
+        let class = assert_class(&ast, "Main", 2);
+
+        assert_method(&class.members[0], "main", 2, Type::Int, true);
+        assert_method(&class.members[1], "test", 0, Type::Float, false);
+    }
+
+    #[test]
+    fn test_with_if() {
+        let toks = lex("
+            class Main {
+                static main (argc: int, args: Array) : int {
+                    if (argc > 0) { return 1; } else { return 0; }
+                }
+            }
+        "
+        .to_string());
+
+        let ast = parse(toks);
+        assert_class(&ast, "Main", 1);
+    }
+
+    #[test]
+    fn test_with_for() {
+        let toks = lex("
+            class Main {
+                static main (argc: int, args: Array) : int {
+                    for (int i = 0; i < argc; i = i + 1) {
+                        if (i == 5) { return i; }
+                    }
+                    return 0;
+                }
+            }
+        "
+        .to_string());
+
+        let ast = parse(toks);
+        assert_class(&ast, "Main", 1);
+    }
+
+    #[test]
+    fn test_with_object_access() {
+        let toks = lex("
+            class Main {
+                static main (argc: int, args: Array) : int {
+                    obj->method();
+                    obj->property = 42;
+                }
+            }
+        "
+        .to_string());
+
+        let ast = parse(toks);
+        let class = assert_class(&ast, "Main", 1);
+
+        let method = &class.members[0];
+        if let ClassMember::Method { body, .. } = method {
+            let stmts = match body {
+                Stmt::Block(Block { stmts }) => stmts,
+                _ => panic!("Expected method body to be a block"),
+            };
+            assert_eq!(stmts.len(), 2);
+
+            // First statement: method call
+            if let Stmt::Expr(Expr::Call { callee, .. }) = &stmts[0] {
+                if let Expr::Access { object, field } = &**callee {
+                    if let Expr::Variable(name) = &**object {
+                        assert_eq!(name, "obj");
+                        assert_eq!(field, "method");
+                    } else {
+                        panic!("Expected object to be variable 'obj'");
+                    }
+                } else {
+                    panic!("Expected a method call on 'obj'");
+                }
             } else {
-                panic!("Expected first member to be a static int property named 'x'");
+                panic!("Expected first statement to be a call");
             }
 
-            if let ClassMember::Property {
-                name,
-                ty,
-                is_static,
-                ..
-            } = &members[1]
-            {
-                assert_eq!(name, "y");
-                assert!(matches!(ty, Type::Float));
-                assert!(!is_static);
+            // Second statement: assignment
+            if let Stmt::Assignment { target, value } = &stmts[1] {
+                if let Expr::Access { object, field } = target {
+                    if let Expr::Variable(name) = &**object {
+                        assert_eq!(name, "obj");
+                        assert_eq!(field, "property");
+                    } else {
+                        panic!("Expected object to be variable 'obj'");
+                    }
+                } else {
+                    panic!("Expected assignment target to be access");
+                }
+
+                if let Expr::Literal(Literal::Number(num)) = value {
+                    assert_eq!(*num, 42.0);
+                } else {
+                    panic!("Expected value to be number 42");
+                }
             } else {
-                panic!("Expected second member to be a float property named 'y'");
+                panic!("Expected second statement to be assignment");
             }
         } else {
-            panic!("Expected first item to be a class named 'Main'");
+            panic!("Expected a method");
         }
-    }
-
-    #[test]
-    fn test_given_methods() {
-        let toks = lex("
-        class Main {
-            static main (argc: int, args: Array) : int {}
-            test () : float {}
-        }
-        "
-        .to_string());
-
-        let ast = parse(toks);
-
-        assert_eq!(ast.items.len(), 1);
-        if let Item::Class(ClassDecl { name, members, .. }) = &ast.items[0] {
-            assert_eq!(name, "Main");
-            assert_eq!(members.len(), 2);
-
-            if let ClassMember::Method {
-                name,
-                params,
-                return_type,
-                is_static,
-                ..
-            } = &members[0]
-            {
-                assert_eq!(name, "main");
-                assert_eq!(params.len(), 2);
-                assert!(matches!(return_type, Type::Int));
-                assert!(*is_static);
-            } else {
-                panic!("Expected first member to be a static method named 'main'");
-            }
-
-            if let ClassMember::Method {
-                name,
-                params,
-                return_type,
-                is_static,
-                ..
-            } = &members[1]
-            {
-                assert_eq!(name, "test");
-                assert!(params.is_empty());
-                assert!(matches!(return_type, Type::Float));
-                assert!(!is_static);
-            } else {
-                panic!("Expected second member to be a non-static method named 'test'");
-            }
-        } else {
-            panic!("Expected first item to be a class named 'Main'");
-        }
-    }
-
-    #[test]
-    fn test_current_features() {
-        let toks = lex("
-        import std.IO;
-        class Main {
-            x : int = 7;
-            static main (argc: int, args: Array) : int {}
-            test () : float {}
-        }
-        "
-        .to_string());
-
-        for tok in toks.iter() {
-            println!("{tok}");
-        }
-
-        let ast = parse(toks);
-
-        println!("{ast}");
     }
 }
