@@ -1,0 +1,8 @@
+import std.IO;
+
+class Main {
+  static main (argc : int, args : Array) : int
+  {
+    return 0;
+  }
+}

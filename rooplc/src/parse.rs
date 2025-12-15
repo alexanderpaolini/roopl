@@ -97,11 +97,11 @@ impl Parser {
         let name = self.expect(TokenKind::Identifier)?.content.unwrap();
 
         let mut initializer = None;
-        if let Some(tok) = self.peek() {
-            if tok.kind == TokenKind::Equals {
-                self.consume();
-                initializer = Some(self.parse_expression()?);
-            }
+        if let Some(tok) = self.peek()
+            && tok.kind == TokenKind::Equals
+        {
+            self.consume();
+            initializer = Some(self.parse_expression()?);
         }
 
         Ok(Stmt::VarDecl {
@@ -193,12 +193,12 @@ impl Parser {
 
         self.expect(TokenKind::RightParen)?;
 
-        return Ok(Stmt::For {
+        Ok(Stmt::For {
             init: init.map(Box::new),
             condition,
             update: update.map(Box::new),
             body: Box::new(self.parse_statement()?),
-        });
+        })
     }
 
     pub fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -271,6 +271,7 @@ impl Parser {
             "int" => Type::Int,
             "float" => Type::Float,
             "string" => Type::String,
+            "void" => Type::Void,
             _ => Type::Named(ty),
         })
     }
@@ -626,7 +627,7 @@ impl Parser {
 
         if let Some(stok) = self.peek()
             && stok.kind == TokenKind::Identifier
-            && stok.content.unwrap() == "static".to_string()
+            && stok.content.unwrap() == "static"
         {
             self.expect(TokenKind::Identifier)?;
             is_static = true;

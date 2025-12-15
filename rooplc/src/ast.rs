@@ -273,7 +273,7 @@ impl fmt::Display for Stmt {
                 if let Some(init) = initializer {
                     write!(f, " = {}", init)?;
                 }
-                writeln!(f, "")
+                writeln!(f)
             }
             Stmt::Assignment { target, value } => {
                 writeln!(f, "{} = {}", target, value)
