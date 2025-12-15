@@ -25,7 +25,7 @@ fn main() {
     let args = Args::parse();
 
     let path = args.input;
-    let contents = fs::read_to_string(&path).expect(&format!("error: could not read {}", path));
+    let contents = fs::read_to_string(&path).unwrap_or_else(|_| panic!("error: could not read {}", path));
 
     let toks = lex::lex(contents);
     if args.toks {
