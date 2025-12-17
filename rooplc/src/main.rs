@@ -4,6 +4,7 @@ use std::fs;
 mod ast;
 mod lex;
 mod parse;
+mod semantics;
 mod token;
 
 #[derive(Parser, Debug)]
@@ -25,7 +26,8 @@ fn main() {
     let args = Args::parse();
 
     let path = args.input;
-    let contents = fs::read_to_string(&path).unwrap_or_else(|_| panic!("error: could not read {}", path));
+    let contents =
+        fs::read_to_string(&path).unwrap_or_else(|_| panic!("error: could not read {}", path));
 
     let toks = lex::lex(contents);
     if args.toks {
@@ -38,4 +40,6 @@ fn main() {
     if args.ast {
         println!("{}", ast);
     }
+
+    let checks = semantics::check(ast);
 }

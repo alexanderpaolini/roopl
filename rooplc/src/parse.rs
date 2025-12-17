@@ -7,6 +7,10 @@ pub struct Parser {
     toks: Vec<Token>,
     idx: usize,
     out: Program,
+
+    next_expr_id: ExprId,
+    next_stmt_id: StmtId,
+    next_class_id: ClassId,
 }
 
 impl Parser {
@@ -15,6 +19,41 @@ impl Parser {
             toks,
             idx: 0,
             out: Program { items: vec![] },
+            next_expr_id: 1,
+            next_stmt_id: 1,
+            next_class_id: 1,
+        }
+    }
+
+    fn generate_expr_id(&mut self) -> ExprId {
+        let id = self.next_expr_id;
+        self.next_expr_id += 1;
+        id
+    }
+
+    fn generate_stmt_id(&mut self) -> StmtId {
+        let id = self.next_stmt_id;
+        self.next_stmt_id += 1;
+        id
+    }
+
+    fn generate_class_id(&mut self) -> StmtId {
+        let id = self.next_stmt_id;
+        self.next_class_id += 1;
+        id
+    }
+
+    fn make_stmt(&mut self, kind: StmtKind) -> Stmt {
+        Stmt {
+            id: self.generate_stmt_id(),
+            kind,
+        }
+    }
+
+    fn make_expr(&mut self, kind: ExprKind) -> Expr {
+        Expr {
+            id: self.generate_expr_id(),
+            kind,
         }
     }
 
@@ -75,21 +114,25 @@ impl Parser {
     pub fn parse_return_statement(&mut self) -> Result<Stmt, ParseError> {
         self.expect(TokenKind::Return)?;
 
-        let mut ret_val: Option<Expr> = None;
-        if let Some(tok) = self.peek()
-            && tok.kind != TokenKind::SemiColon
-        {
-            ret_val = Some(self.parse_expression()?);
-        }
+        let ret_val = if let Some(tok) = self.peek() {
+            if tok.kind != TokenKind::SemiColon {
+                Some(self.parse_expression()?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         self.expect(TokenKind::SemiColon)?;
 
-        Ok(Stmt::Return(ret_val))
+        Ok(self.make_stmt(StmtKind::Return(ReturnStmt { value: ret_val })))
     }
 
     pub fn parse_expression_statement(&mut self) -> Result<Stmt, ParseError> {
         let res = self.parse_expression()?;
 
-        Ok(Stmt::Expr(res))
+        Ok(self.make_stmt(StmtKind::Expr(res)))
     }
 
     pub fn parse_variable_declaration_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -104,11 +147,11 @@ impl Parser {
             initializer = Some(self.parse_expression()?);
         }
 
-        Ok(Stmt::VarDecl {
+        Ok(self.make_stmt(StmtKind::VarDecl(VarDeclStmt {
             name,
             ty,
             initializer,
-        })
+        })))
     }
 
     pub fn parse_assignment_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -118,7 +161,7 @@ impl Parser {
 
         let value = self.parse_expression()?;
 
-        Ok(Stmt::Assignment { target, value })
+        Ok(self.make_stmt(StmtKind::Assignment(AssignmentStmt { target, value })))
     }
 
     pub fn parse_if_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -142,11 +185,11 @@ impl Parser {
             None
         };
 
-        Ok(Stmt::If {
+        Ok(self.make_stmt(StmtKind::If(IfStmt {
             condition,
             then_branch,
             else_branch,
-        })
+        })))
     }
 
     pub fn parse_for_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -193,12 +236,14 @@ impl Parser {
 
         self.expect(TokenKind::RightParen)?;
 
-        Ok(Stmt::For {
+        let stmt = self.parse_statement()?;
+
+        Ok(self.make_stmt(StmtKind::For(ForStmt {
             init: init.map(Box::new),
             condition,
             update: update.map(Box::new),
-            body: Box::new(self.parse_statement()?),
-        })
+            body: Box::new(stmt),
+        })))
     }
 
     pub fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
@@ -221,9 +266,9 @@ impl Parser {
 
                             let value: Expr = self.parse_expression()?;
 
-                            Stmt::Assignment { target, value }
+                            self.make_stmt(StmtKind::Assignment(AssignmentStmt { target, value }))
                         } else {
-                            Stmt::Expr(target)
+                            self.make_stmt(StmtKind::Expr(target))
                         }
                     }
                 };
@@ -258,7 +303,7 @@ impl Parser {
 
         self.expect(TokenKind::RightBracket)?;
 
-        Ok(Stmt::Block(Block { stmts }))
+        Ok(self.make_stmt(StmtKind::Block(BlockStmt { stmts })))
     }
 
     pub fn parse_type(&mut self) -> Result<Type, ParseError> {
@@ -317,13 +362,13 @@ impl Parser {
 
         let body = self.parse_block_statement()?;
 
-        Ok(ClassMember::Method {
+        Ok(ClassMember::Method(MethodMember {
             name,
             params,
             return_type,
             body,
             is_static,
-        })
+        }))
     }
 
     pub fn parse_property(&mut self, is_static: bool) -> Result<ClassMember, ParseError> {
@@ -341,12 +386,12 @@ impl Parser {
 
         self.expect(TokenKind::SemiColon)?;
 
-        Ok(ClassMember::Property {
+        Ok(ClassMember::Property(PropertyMember {
             name,
             ty,
             initializer: value,
             is_static,
-        })
+        }))
     }
 
     pub fn parse_expression(&mut self) -> Result<Expr, ParseError> {
@@ -360,11 +405,11 @@ impl Parser {
             if tok.kind == TokenKind::DoublePipe {
                 self.consume();
                 let right = self.parse_logical_and()?;
-                expr = Expr::Binary {
+                expr = self.make_expr(ExprKind::Binary(BinaryExpr {
                     left: Box::new(expr),
                     op: BinaryOp::LogicalOr,
                     right: Box::new(right),
-                };
+                }));
             } else {
                 break;
             }
@@ -380,11 +425,11 @@ impl Parser {
             if tok.kind == TokenKind::And {
                 self.consume();
                 let right = self.parse_equality()?;
-                expr = Expr::Binary {
+                expr = self.make_expr(ExprKind::Binary(BinaryExpr {
                     left: Box::new(expr),
                     op: BinaryOp::LogicalAnd,
                     right: Box::new(right),
-                };
+                }));
             } else {
                 break;
             }
@@ -406,11 +451,11 @@ impl Parser {
                     };
                     self.consume();
                     let right = self.parse_relational()?;
-                    expr = Expr::Binary {
+                    expr = self.make_expr(ExprKind::Binary(BinaryExpr {
                         left: Box::new(expr),
                         op,
                         right: Box::new(right),
-                    };
+                    }));
                 }
                 _ => break,
             }
@@ -437,11 +482,11 @@ impl Parser {
                     };
                     self.consume();
                     let right = self.parse_additive()?;
-                    expr = Expr::Binary {
+                    expr = self.make_expr(ExprKind::Binary(BinaryExpr {
                         left: Box::new(expr),
                         op,
                         right: Box::new(right),
-                    };
+                    }));
                 }
                 _ => break,
             }
@@ -463,11 +508,11 @@ impl Parser {
                     };
                     self.consume();
                     let right = self.parse_multiplicative()?;
-                    expr = Expr::Binary {
+                    expr = self.make_expr(ExprKind::Binary(BinaryExpr {
                         left: Box::new(expr),
                         op,
                         right: Box::new(right),
-                    };
+                    }));
                 }
                 _ => break,
             }
@@ -490,11 +535,11 @@ impl Parser {
                     };
                     self.consume();
                     let right = self.parse_unary()?;
-                    expr = Expr::Binary {
+                    expr = self.make_expr(ExprKind::Binary(BinaryExpr {
                         left: Box::new(expr),
                         op,
                         right: Box::new(right),
-                    };
+                    }));
                 }
                 _ => break,
             }
@@ -514,10 +559,10 @@ impl Parser {
                     };
                     self.consume();
                     let expr = self.parse_postfix()?;
-                    return Ok(Expr::Unary {
+                    return Ok(self.make_expr(ExprKind::Unary(UnaryExpr {
                         op,
                         expr: Box::new(expr),
-                    });
+                    })));
                 }
                 _ => {}
             }
@@ -536,20 +581,20 @@ impl Parser {
                     let args = self.parse_argument_list()?;
                     self.expect(TokenKind::RightParen)?;
 
-                    expr = Expr::Call {
+                    expr = self.make_expr(ExprKind::Call(CallExpr {
                         callee: Box::new(expr),
                         args,
-                    };
+                    }));
                 }
 
                 Some(tok) if tok.kind == TokenKind::RightArrow => {
                     self.consume();
                     let field = self.expect(TokenKind::Identifier)?;
 
-                    expr = Expr::Access {
+                    expr = self.make_expr(ExprKind::Access(AccessExpr {
                         object: Box::new(expr),
                         field: field.content.unwrap(),
-                    };
+                    }));
                 }
 
                 _ => break,
@@ -565,23 +610,25 @@ impl Parser {
                 TokenKind::Number => {
                     let value = tok.content.unwrap().parse::<f64>().unwrap();
                     self.consume();
-                    return Ok(Expr::Literal(Literal::Number(value)));
+                    return Ok(self.make_expr(ExprKind::Literal(Literal::Number(value))));
                 }
                 TokenKind::String => {
                     let value = tok.content.unwrap();
                     self.consume();
-                    return Ok(Expr::Literal(Literal::String(value)));
+                    return Ok(self.make_expr(ExprKind::Literal(Literal::String(value))));
                 }
                 TokenKind::Identifier => {
                     let name = tok.content.unwrap();
                     self.consume();
-                    return Ok(Expr::Variable(name));
+                    return Ok(self.make_expr(ExprKind::Variable(name)));
                 }
                 TokenKind::LeftParen => {
                     self.consume();
                     let expr = self.parse_expression()?;
                     self.expect(TokenKind::RightParen)?;
-                    return Ok(Expr::Grouping(Box::new(expr)));
+                    return Ok(self.make_expr(ExprKind::Grouping(GroupingExpr {
+                        expr: Box::new(expr),
+                    })));
                 }
                 _ => {}
             }
@@ -660,6 +707,7 @@ impl Parser {
         self.expect(TokenKind::Class)?;
 
         let mut class_decl = ClassDecl {
+            id: self.generate_class_id(),
             name: self.expect(TokenKind::Identifier)?.content.unwrap(),
             base: None,
             members: Vec::new(),
@@ -724,12 +772,12 @@ mod tests {
     }
 
     fn assert_property(member: &ClassMember, name: &str, ty: Type, is_static: bool) {
-        if let ClassMember::Property {
+        if let ClassMember::Property(PropertyMember {
             name: n,
             ty: t,
             is_static: s,
             ..
-        } = member
+        }) = member
         {
             assert_eq!(n, name);
             assert!(matches!(t, _ if *t == ty));
@@ -746,13 +794,13 @@ mod tests {
         return_ty: Type,
         is_static: bool,
     ) {
-        if let ClassMember::Method {
+        if let ClassMember::Method(MethodMember {
             name: n,
             params,
             return_type,
             is_static: s,
             ..
-        } = member
+        }) = member
         {
             assert_eq!(n, name);
             assert_eq!(params.len(), param_count);
@@ -846,33 +894,37 @@ mod tests {
         let class = assert_class(&ast, "Main", 1);
 
         let method = &class.members[0];
-        if let ClassMember::Method { body, .. } = method {
-            let stmts = match body {
-                Stmt::Block(Block { stmts }) => stmts,
+        if let ClassMember::Method(MethodMember { body, .. }) = method {
+            let stmts = match &body.kind {
+                StmtKind::Block(BlockStmt { stmts }) => stmts,
                 _ => panic!("Expected method body to be a block"),
             };
             assert_eq!(stmts.len(), 2);
 
             // First statement: method call
-            if let Stmt::Expr(Expr::Call { callee, .. }) = &stmts[0] {
-                if let Expr::Access { object, field } = &**callee {
-                    if let Expr::Variable(name) = &**object {
-                        assert_eq!(name, "obj");
-                        assert_eq!(field, "method");
+            if let StmtKind::Expr(expr) = &stmts[0].kind {
+                if let ExprKind::Call(CallExpr { callee, .. }) = &expr.kind {
+                    if let ExprKind::Access(AccessExpr { object, field }) = &callee.kind {
+                        if let ExprKind::Variable(name) = &object.kind {
+                            assert_eq!(name, "obj");
+                            assert_eq!(field, "method");
+                        } else {
+                            panic!("Expected object to be variable 'obj'");
+                        }
                     } else {
-                        panic!("Expected object to be variable 'obj'");
+                        panic!("Expected a method call on 'obj'");
                     }
                 } else {
-                    panic!("Expected a method call on 'obj'");
+                    panic!("Expected first statement to be a call");
                 }
             } else {
-                panic!("Expected first statement to be a call");
+                panic!("Expected first statement to be an expression");
             }
 
             // Second statement: assignment
-            if let Stmt::Assignment { target, value } = &stmts[1] {
-                if let Expr::Access { object, field } = target {
-                    if let Expr::Variable(name) = &**object {
+            if let StmtKind::Assignment(AssignmentStmt { target, value }) = &stmts[1].kind {
+                if let ExprKind::Access(AccessExpr { object, field }) = &target.kind {
+                    if let ExprKind::Variable(name) = &object.kind {
                         assert_eq!(name, "obj");
                         assert_eq!(field, "property");
                     } else {
@@ -882,7 +934,7 @@ mod tests {
                     panic!("Expected assignment target to be access");
                 }
 
-                if let Expr::Literal(Literal::Number(num)) = value {
+                if let ExprKind::Literal(Literal::Number(num)) = &value.kind {
                     assert_eq!(*num, 42.0);
                 } else {
                     panic!("Expected value to be number 42");

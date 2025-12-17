@@ -2,33 +2,55 @@ use std::fmt;
 
 use crate::token::{Token, TokenKind};
 
+pub type ExprId = u32;
+pub type StmtId = u32;
+pub type ClassId = u32;
+
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub struct Expr {
+    pub id: ExprId,
+    pub kind: ExprKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExprKind {
     Literal(Literal),
     Variable(String),
+    Unary(UnaryExpr),
+    Binary(BinaryExpr),
+    Grouping(GroupingExpr),
+    Call(CallExpr),
+    Access(AccessExpr),
+}
 
-    Unary {
-        op: UnaryOp,
-        expr: Box<Expr>,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnaryExpr {
+    pub op: UnaryOp,
+    pub expr: Box<Expr>,
+}
 
-    Binary {
-        left: Box<Expr>,
-        op: BinaryOp,
-        right: Box<Expr>,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct BinaryExpr {
+    pub left: Box<Expr>,
+    pub op: BinaryOp,
+    pub right: Box<Expr>,
+}
 
-    Grouping(Box<Expr>),
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupingExpr {
+    pub expr: Box<Expr>,
+}
 
-    Call {
-        callee: Box<Expr>,
-        args: Vec<Expr>,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct CallExpr {
+    pub callee: Box<Expr>,
+    pub args: Vec<Expr>,
+}
 
-    Access {
-        object: Box<Expr>,
-        field: String,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccessExpr {
+    pub object: Box<Expr>,
+    pub field: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -81,6 +103,7 @@ pub struct ImportStmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassDecl {
+    pub id: ClassId,
     pub name: String,
     pub base: Option<String>,
     pub members: Vec<ClassMember>,
@@ -88,19 +111,25 @@ pub struct ClassDecl {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClassMember {
-    Property {
-        name: String,
-        ty: Type,
-        initializer: Option<Expr>,
-        is_static: bool,
-    },
-    Method {
-        name: String,
-        params: Vec<Parameter>,
-        return_type: Type,
-        body: Stmt,
-        is_static: bool,
-    },
+    Property(PropertyMember),
+    Method(MethodMember),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PropertyMember {
+    pub name: String,
+    pub ty: Type,
+    pub initializer: Option<Expr>,
+    pub is_static: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MethodMember {
+    pub name: String,
+    pub params: Vec<Parameter>,
+    pub return_type: Type,
+    pub body: Stmt,
+    pub is_static: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,44 +145,62 @@ pub enum Type {
     String,
     Void,
     Named(String),
+    Error,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Block {
+pub struct Stmt {
+    pub id: StmtId,
+    pub kind: StmtKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StmtKind {
+    Block(BlockStmt),
+    VarDecl(VarDeclStmt),
+    Assignment(AssignmentStmt),
+    If(IfStmt),
+    For(ForStmt),
+    Return(ReturnStmt),
+    Expr(Expr),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockStmt {
     pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Stmt {
-    Block(Block),
+pub struct VarDeclStmt {
+    pub ty: Type,
+    pub name: String,
+    pub initializer: Option<Expr>,
+}
 
-    VarDecl {
-        ty: Type,
-        name: String,
-        initializer: Option<Expr>,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssignmentStmt {
+    pub target: Expr,
+    pub value: Expr,
+}
 
-    Assignment {
-        target: Expr,
-        value: Expr,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct IfStmt {
+    pub condition: Expr,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
+}
 
-    If {
-        condition: Expr,
-        then_branch: Box<Stmt>,
-        else_branch: Option<Box<Stmt>>,
-    },
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForStmt {
+    pub init: Option<Box<Stmt>>,
+    pub condition: Expr,
+    pub update: Option<Box<Stmt>>,
+    pub body: Box<Stmt>,
+}
 
-    For {
-        init: Option<Box<Stmt>>,
-        condition: Expr,
-        update: Option<Box<Stmt>>,
-        body: Box<Stmt>,
-    },
-
-    Return(Option<Expr>),
-
-    Expr(Expr),
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReturnStmt {
+    pub value: Option<Expr>,
 }
 
 #[derive(Debug)]
@@ -171,12 +218,13 @@ fn indent_lines(s: &str, indent: &str) -> String {
         .join("\n")
 }
 
+// ------------------ Display impls ------------------
+
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Program")?;
         for item in &self.items {
-            let item_str = format!("{item}");
-            writeln!(f, "{}", indent_lines(&item_str, "  "))?;
+            writeln!(f, "{}", indent_lines(&format!("{}", item), "  "))?;
         }
         Ok(())
     }
@@ -185,9 +233,15 @@ impl fmt::Display for Program {
 impl fmt::Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Item::Import(import_stmt) => write!(f, "{}", import_stmt),
-            Item::Class(class_decl) => write!(f, "{}", class_decl),
+            Item::Import(import) => write!(f, "{}", import),
+            Item::Class(class) => write!(f, "{}", class),
         }
+    }
+}
+
+impl fmt::Display for ImportStmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Import {}", self.path.join("."))
     }
 }
 
@@ -199,59 +253,41 @@ impl fmt::Display for ClassDecl {
             self.name,
             self.base
                 .as_ref()
-                .map_or(String::new(), |base| format!(" (extends {})", base))
+                .map_or(String::new(), |b| format!(" (extends {})", b))
         )?;
         for member in &self.members {
-            let member_str = format!("{}", member);
-            writeln!(f, "{}", indent_lines(&member_str, "  "))?;
+            writeln!(f, "{}", indent_lines(&format!("{}", member), "  "))?;
         }
         Ok(())
-    }
-}
-
-impl fmt::Display for ImportStmt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Import {}", self.path.join("."))
     }
 }
 
 impl fmt::Display for ClassMember {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClassMember::Property {
-                name,
-                ty,
-                initializer,
-                is_static,
-            } => {
-                if *is_static {
+            ClassMember::Property(p) => {
+                if p.is_static {
                     write!(f, "static ")?;
                 }
-                write!(f, "{} : {:?}", name, ty)?;
-                if let Some(init) = initializer {
-                    write!(f, " = {:?}", init)?;
+                write!(f, "{} : {:?}", p.name, p.ty)?;
+                if let Some(init) = &p.initializer {
+                    write!(f, " = {}", init)?;
                 }
                 Ok(())
             }
-            ClassMember::Method {
-                name,
-                params,
-                return_type,
-                body,
-                is_static,
-            } => {
-                if *is_static {
+            ClassMember::Method(m) => {
+                if m.is_static {
                     write!(f, "static ")?;
                 }
-                write!(f, "{} (", name)?;
-                for (i, param) in params.iter().enumerate() {
+                write!(f, "{}(", m.name)?;
+                for (i, param) in m.params.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}: {:?}", param.name, param.ty)?;
                 }
-                writeln!(f, ") : {:?} ", return_type)?;
-                writeln!(f, "{}", indent_lines(&format!("{}", body), "  "))
+                writeln!(f, ") : {:?}", m.return_type)?;
+                writeln!(f, "{}", indent_lines(&format!("{}", m.body), "  "))
             }
         }
     }
@@ -259,70 +295,52 @@ impl fmt::Display for ClassMember {
 
 impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Stmt::Block(block) => {
-                writeln!(f, "Block")?;
-                write!(f, "{}", block)
-            }
-            Stmt::VarDecl {
-                ty,
-                name,
-                initializer,
-            } => {
-                write!(f, "{} : {:?}", name, ty)?;
-                if let Some(init) = initializer {
+        match &self.kind {
+            StmtKind::Block(b) => writeln!(f, "Block\n{}", b),
+            StmtKind::VarDecl(v) => {
+                write!(f, "{} : {:?}", v.name, v.ty)?;
+                if let Some(init) = &v.initializer {
                     write!(f, " = {}", init)?;
                 }
                 writeln!(f)
             }
-            Stmt::Assignment { target, value } => {
-                writeln!(f, "{} = {}", target, value)
-            }
-            Stmt::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                writeln!(f, "if {}", condition)?;
-                let then_str = format!("{}", then_branch);
-                writeln!(f, "{}", indent_lines(&then_str, "  "))?;
-                if let Some(else_branch) = else_branch {
+            StmtKind::Assignment(a) => writeln!(f, "{} = {}", a.target, a.value),
+            StmtKind::If(i) => {
+                writeln!(f, "if {}", i.condition)?;
+                writeln!(f, "{}", indent_lines(&format!("{}", i.then_branch), "  "))?;
+                if let Some(e) = &i.else_branch {
                     writeln!(f, "else")?;
-                    let else_str = format!("{}", else_branch);
-                    writeln!(f, "{}", indent_lines(&else_str, "  "))?;
+                    writeln!(f, "{}", indent_lines(&format!("{}", e), "  "))?;
                 }
                 Ok(())
             }
-            Stmt::For {
-                init,
-                condition,
-                update,
-                body,
-            } => {
+            StmtKind::For(fstmt) => {
                 writeln!(f, "for")?;
-                if let Some(init_stmt) = init {
-                    let init_str = format!("{}", init_stmt);
-                    writeln!(f, "{}", indent_lines(&init_str, "  "))?;
+                if let Some(init) = &fstmt.init {
+                    writeln!(f, "{}", indent_lines(&format!("{}", init), "  "))?;
                 }
-                let cond_str = format!("{}", condition);
-                writeln!(f, "{}", indent_lines(&cond_str, "  "))?;
-                if let Some(update_stmt) = update {
-                    let update_str = format!("{}", update_stmt);
-                    writeln!(f, "{}", indent_lines(&update_str, "  "))?;
+                writeln!(f, "{}", indent_lines(&format!("{}", fstmt.condition), "  "))?;
+                if let Some(update) = &fstmt.update {
+                    writeln!(f, "{}", indent_lines(&format!("{}", update), "  "))?;
                 }
-                let body_str = format!("{}", body);
-                writeln!(f, "{}", indent_lines(&body_str, "    "))
+                writeln!(f, "{}", indent_lines(&format!("{}", fstmt.body), "    "))
             }
-            _ => write!(f, "{:?}", self),
+            StmtKind::Return(r) => {
+                if let Some(val) = &r.value {
+                    writeln!(f, "return {}", val)
+                } else {
+                    writeln!(f, "return")
+                }
+            }
+            StmtKind::Expr(e) => writeln!(f, "{}", e),
         }
     }
 }
 
-impl fmt::Display for Block {
+impl fmt::Display for BlockStmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for stmt in &self.stmts {
-            let stmt_str = format!("{}", stmt);
-            writeln!(f, "{}", indent_lines(&stmt_str, "  "))?;
+            writeln!(f, "{}", indent_lines(&format!("{}", stmt), "  "))?;
         }
         Ok(())
     }
@@ -330,15 +348,15 @@ impl fmt::Display for Block {
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Expr::Literal(literal) => write!(f, "{:?}", literal),
-            Expr::Variable(name) => write!(f, "{}", name),
-            Expr::Unary { op, expr } => write!(f, "({:?} {})", op, expr),
-            Expr::Binary { left, op, right } => write!(f, "({} {:?} {})", left, op, right),
-            Expr::Grouping(expr) => write!(f, "(group {})", expr),
-            Expr::Call { callee, args } => {
-                write!(f, "{}(", callee)?;
-                for (i, arg) in args.iter().enumerate() {
+        match &self.kind {
+            ExprKind::Literal(l) => write!(f, "{:?}", l),
+            ExprKind::Variable(n) => write!(f, "{}", n),
+            ExprKind::Unary(u) => write!(f, "({:?} {})", u.op, u.expr),
+            ExprKind::Binary(b) => write!(f, "({} {:?} {})", b.left, b.op, b.right),
+            ExprKind::Grouping(g) => write!(f, "(group {})", g.expr),
+            ExprKind::Call(c) => {
+                write!(f, "{}(", c.callee)?;
+                for (i, arg) in c.args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
@@ -346,7 +364,7 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             }
-            Expr::Access { object, field } => write!(f, "{}.{}", object, field),
+            ExprKind::Access(a) => write!(f, "{}.{}", a.object, a.field),
         }
     }
 }
