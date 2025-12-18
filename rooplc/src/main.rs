@@ -1,9 +1,9 @@
 use clap::Parser;
-use std::fs;
 
 mod ast;
 mod lex;
 mod parse;
+mod resolver;
 mod semantics;
 mod token;
 
@@ -25,21 +25,35 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    let path = args.input;
-    let contents =
-        fs::read_to_string(&path).unwrap_or_else(|_| panic!("error: could not read {}", path));
+    let entry = args.input;
 
-    let toks = lex::lex(contents);
-    if args.toks {
-        for tok in &toks {
-            println!("{}", tok);
+    let resolver = match resolver::ModuleResolver::new(entry) {
+        Ok(resolver) => resolver,
+        Err(e) => {
+            eprintln!("{:?}", e);
+            return;
         }
+    };
+
+    let res = resolver.resolve();
+
+    if let Err(errors) = res {
+        for error in errors {
+            eprintln!("{:?}", error);
+        }
+        return;
     }
 
-    let ast = parse::parse(toks);
+    let program = res.unwrap();
+
     if args.ast {
-        println!("{}", ast);
+        println!("{program}");
     }
 
-    let checks = semantics::check(ast);
+    if let Err(errors) = semantics::check(program) {
+        for error in errors {
+            eprintln!("{:?}", error);
+        }
+        return;
+    }
 }

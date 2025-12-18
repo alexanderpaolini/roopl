@@ -1,8 +1,9 @@
-import std.IO;
+import Square;
 
 class Main {
   static main (argc : int, args : Array) : int
   {
+    Square x = Square->init();
     return 0;
   }
 }

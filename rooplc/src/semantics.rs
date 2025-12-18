@@ -154,10 +154,12 @@ impl TypeEnv {
     }
 }
 
-pub fn check(ast: Program) -> Result<(), ()> {
+pub fn check(ast: Program) -> Result<(), Vec<TypeError>> {
     let te = TypeEnv::new().process(&ast);
 
-    te.print_errors()?;
+    if te.errors.len() > 0 {
+        return Err(te.errors);
+    }
 
     Ok(())
 }

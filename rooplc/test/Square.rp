@@ -1,0 +1,8 @@
+import Rectangle; 
+
+class Square < Rectangle {
+    init(side : Int) : Square {
+        super->init(side, side);
+        return this;
+    }
+}
