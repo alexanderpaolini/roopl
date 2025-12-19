@@ -608,9 +608,16 @@ impl Parser {
         if let Some(tok) = self.peek() {
             match tok.kind {
                 TokenKind::Number => {
-                    let value = tok.content.unwrap().parse::<f64>().unwrap();
-                    self.consume();
-                    return Ok(self.make_expr(ExprKind::Literal(Literal::Number(value))));
+                    let value = tok.content.unwrap();
+                    if value.contains('.') {
+                        let float_value = value.parse::<f64>().unwrap();
+                        self.consume();
+                        return Ok(self.make_expr(ExprKind::Literal(Literal::Float(float_value))));
+                    } else {
+                        let int_value = value.parse::<i64>().unwrap();
+                        self.consume();
+                        return Ok(self.make_expr(ExprKind::Literal(Literal::Int(int_value))));
+                    }
                 }
                 TokenKind::String => {
                     let value = tok.content.unwrap();
@@ -618,6 +625,13 @@ impl Parser {
                     return Ok(self.make_expr(ExprKind::Literal(Literal::String(value))));
                 }
                 TokenKind::Identifier => {
+                    if tok.content.as_deref() == Some("true") {
+                        self.consume();
+                        return Ok(self.make_expr(ExprKind::Literal(Literal::Boolean(true))));
+                    } else if tok.content.as_deref() == Some("false") {
+                        self.consume();
+                        return Ok(self.make_expr(ExprKind::Literal(Literal::Boolean(false))));
+                    }
                     let name = tok.content.unwrap();
                     self.consume();
                     return Ok(self.make_expr(ExprKind::Variable(name)));
@@ -884,7 +898,7 @@ mod tests {
             class Main {
                 static main (argc: int, args: Array) : int {
                     obj->method();
-                    obj->property = 42;
+                    obj->property = 42.0;
                 }
             }
         "
@@ -921,7 +935,6 @@ mod tests {
                 panic!("Expected first statement to be an expression");
             }
 
-            // Second statement: assignment
             if let StmtKind::Assignment(AssignmentStmt { target, value }) = &stmts[1].kind {
                 if let ExprKind::Access(AccessExpr { object, field }) = &target.kind {
                     if let ExprKind::Variable(name) = &object.kind {
@@ -934,7 +947,7 @@ mod tests {
                     panic!("Expected assignment target to be access");
                 }
 
-                if let ExprKind::Literal(Literal::Number(num)) = &value.kind {
+                if let ExprKind::Literal(Literal::Float(num)) = &value.kind {
                     assert_eq!(*num, 42.0);
                 } else {
                     panic!("Expected value to be number 42");

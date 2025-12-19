@@ -81,7 +81,9 @@ pub enum BinaryOp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
-    Number(f64),
+    Boolean(bool),
+    Int(i64),
+    Float(f64),
     String(String),
 }
 
@@ -144,6 +146,7 @@ pub enum Type {
     Float,
     String,
     Void,
+    Boolean,
     Named(String),
     Error,
 }
