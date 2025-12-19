@@ -1,7 +1,7 @@
 import Rectangle; 
 
 class Square < Rectangle {
-    init(side : Int) : Square {
+    init(side : int) : Square {
         super->init(side, side);
         return this;
     }

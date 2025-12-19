@@ -54,6 +54,5 @@ fn main() {
         for error in errors {
             eprintln!("{:?}", error);
         }
-        return;
     }
 }

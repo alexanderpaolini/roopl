@@ -21,6 +21,7 @@ pub enum ExprKind {
     Grouping(GroupingExpr),
     Call(CallExpr),
     Access(AccessExpr),
+    Error,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -166,6 +167,7 @@ pub enum StmtKind {
     For(ForStmt),
     Return(ReturnStmt),
     Expr(Expr),
+    Error,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -206,12 +208,23 @@ pub struct ReturnStmt {
     pub value: Option<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParseError {
-    UnexpectedToken { expected: TokenKind, found: Token },
+    UnexpectedToken { expected: Expected, found: Token },
     EndOfInput,
     InvalidExpression,
     NotImplemented,
+}
+
+#[derive(Debug, Clone)]
+pub enum Expected {
+    Token(TokenKind),
+    Member,
+    Item,
+    Expression(&'static str),
+    Statement(&'static str),
+    Type(&'static str),
+    Identifier(&'static str),
 }
 
 fn indent_lines(s: &str, indent: &str) -> String {
@@ -220,8 +233,6 @@ fn indent_lines(s: &str, indent: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
-
-// ------------------ Display impls ------------------
 
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -336,6 +347,7 @@ impl fmt::Display for Stmt {
                 }
             }
             StmtKind::Expr(e) => writeln!(f, "{}", e),
+            StmtKind::Error => writeln!(f, "ERROR"),
         }
     }
 }
@@ -368,6 +380,7 @@ impl fmt::Display for Expr {
                 write!(f, ")")
             }
             ExprKind::Access(a) => write!(f, "{}.{}", a.object, a.field),
+            ExprKind::Error => write!(f, "ERROR"),
         }
     }
 }

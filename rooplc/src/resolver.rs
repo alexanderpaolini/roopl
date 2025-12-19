@@ -5,8 +5,9 @@ use std::{
 };
 
 use crate::{
-    ast::{ImportStmt, Item, Program},
-    lex, parse,
+    ast::{ImportStmt, Item, ParseError, Program},
+    lex,
+    parse::{self},
 };
 
 type FileId = PathBuf;
@@ -16,11 +17,11 @@ pub enum ResolveError {
     UnresolvedEntryPoint(String),
     UnresolvedImport(PathBuf),
     ImportCycle(PathBuf),
+    ParseError(Vec<ParseError>),
 }
 
 #[derive(Debug)]
 struct Module {
-    id: FileId,
     program: Program,
 }
 
@@ -75,16 +76,15 @@ impl ModuleResolver {
 
         self.parsing.insert(id.clone());
 
-        let program = match self.load_program(&id) {
-            Ok(p) => p,
-            Err(e) => {
-                self.errors.push(e);
-                self.parsing.remove(&id);
+        let program = match self.parse_file(&id) {
+            Ok(program) => program,
+            Err(err) => {
+                self.errors.push(err);
                 return;
             }
         };
 
-        let imports = collect_imports(&program);
+        let imports = self.collect_imports(&program);
 
         for import in imports {
             for target in self.expand_import(&import) {
@@ -93,13 +93,20 @@ impl ModuleResolver {
         }
 
         self.parsing.remove(&id);
-        self.parsed.insert(id.clone(), Module { id, program });
+        self.parsed.insert(id.clone(), Module { program });
     }
 
-    fn load_program(&self, id: &FileId) -> Result<Program, ResolveError> {
+    fn parse_file(&self, id: &FileId) -> Result<Program, ResolveError> {
         let src = fs::read_to_string(id).map_err(|_| ResolveError::UnresolvedImport(id.clone()))?;
         let toks = lex::lex(src);
-        Ok(parse::parse(toks))
+        let mut parser = parse::Parser::new(toks);
+        let res = parser.parse();
+
+        if let Err(errors) = res {
+            return Err(ResolveError::ParseError(errors));
+        }
+
+        Ok(res.unwrap())
     }
 
     fn expand_import(&mut self, import: &ImportStmt) -> Vec<FileId> {
@@ -159,15 +166,15 @@ impl ModuleResolver {
         }
         Program { items }
     }
-}
 
-fn collect_imports(program: &Program) -> Vec<ImportStmt> {
-    program
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Import(i) => Some(i.clone()),
-            _ => None,
-        })
-        .collect()
+    fn collect_imports(&self, program: &Program) -> Vec<ImportStmt> {
+        program
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Import(i) => Some(i.clone()),
+                _ => None,
+            })
+            .collect()
+    }
 }

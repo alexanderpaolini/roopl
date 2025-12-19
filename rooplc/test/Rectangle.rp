@@ -1,18 +1,18 @@
 class Rectangle {
-    width : Int;
-    height : Int;
+    width : int;
+    height : int;
 
-    init(width : Int, height : Int) : Rectangle {
+    init(width : int, height : int) : Rectangle {
         this->width = width;
         this->height = height;
         return this;
     }
 
-    area() : Int {
-        return width * height;
+    area() : int {
+        return this->width * this->height;
     }
 
-    perimeter() : Int {
-        return 2 * (width + height);
+    perimeter() : int {
+        return 2 * (this->width + this->height);
     }
 }
