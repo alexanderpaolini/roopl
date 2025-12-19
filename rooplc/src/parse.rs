@@ -191,18 +191,18 @@ impl Parser {
     }
 
     pub fn parse_variable_declaration_statement(&mut self) -> Stmt {
-        let ty = self.parse_type();
-        if ty.is_err() {
-            self.errors.push(ty.unwrap_err());
-            self.synchronize_stmt();
-            return self.make_error_stmt();
-        }
-        let ty = ty.unwrap();
+        let ty = match self.parse_type() {
+            Ok(ty) => ty,
+            Err(err) => {
+                self.errors.push(err);
+                self.synchronize_stmt();
+                return self.make_error_stmt();
+            }
+        };
 
         let name = self.expect(TokenKind::Identifier);
-
-        if name.is_err() {
-            self.errors.push(name.unwrap_err());
+        if let Err(err) = name {
+            self.errors.push(err);
             self.synchronize_stmt();
             return self.make_error_stmt();
         }
@@ -370,8 +370,8 @@ impl Parser {
             TokenKind::Identifier => {
                 let ntok = self.peek_next().ok_or(ParseError::EndOfInput);
 
-                if ntok.is_err() {
-                    self.errors.push(ntok.unwrap_err());
+                if let Err(err) = ntok {
+                    self.errors.push(err);
                     return self.make_error_stmt();
                 }
 
@@ -726,7 +726,8 @@ impl Parser {
                     }));
                 }
 
-                Some(TokenKind::RightArrow) => {
+                Some(TokenKind::RightArrow) | Some(TokenKind::Dot) => {
+                    let is_static = matches!(self.peek_kind(), Some(TokenKind::Dot));
                     self.consume();
 
                     let field = match self.expect(TokenKind::Identifier) {
@@ -741,6 +742,7 @@ impl Parser {
                     expr = self.make_expr(ExprKind::Access(AccessExpr {
                         object: Box::new(expr),
                         field,
+                        is_static,
                     }));
                 }
 
@@ -1081,7 +1083,12 @@ mod tests {
             // First statement: method call
             if let StmtKind::Expr(expr) = &stmts[0].kind {
                 if let ExprKind::Call(CallExpr { callee, .. }) = &expr.kind {
-                    if let ExprKind::Access(AccessExpr { object, field }) = &callee.kind {
+                    if let ExprKind::Access(AccessExpr {
+                        object,
+                        field,
+                        is_static,
+                    }) = &callee.kind
+                    {
                         if let ExprKind::Variable(name) = &object.kind {
                             assert_eq!(name, "obj");
                             assert_eq!(field, "method");
@@ -1099,7 +1106,12 @@ mod tests {
             }
 
             if let StmtKind::Assignment(AssignmentStmt { target, value }) = &stmts[1].kind {
-                if let ExprKind::Access(AccessExpr { object, field }) = &target.kind {
+                if let ExprKind::Access(AccessExpr {
+                    object,
+                    field,
+                    is_static,
+                }) = &target.kind
+                {
                     if let ExprKind::Variable(name) = &object.kind {
                         assert_eq!(name, "obj");
                         assert_eq!(field, "property");

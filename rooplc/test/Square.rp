@@ -1,8 +1,9 @@
 import Rectangle; 
 
 class Square < Rectangle {
-    init(side : int) : Square {
-        super->init(side, side);
-        return this;
+    static init(side : int) : Square {
+        Square res = new Square;
+        res->super->init(side, side);
+        return res;
     }
 }

@@ -50,6 +50,7 @@ pub struct CallExpr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccessExpr {
+    pub is_static: bool,
     pub object: Box<Expr>,
     pub field: String,
 }
@@ -379,7 +380,13 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             }
-            ExprKind::Access(a) => write!(f, "{}.{}", a.object, a.field),
+            ExprKind::Access(a) => {
+                if a.is_static {
+                    write!(f, "{}.{}", a.object, a.field)
+                } else {
+                    write!(f, "{}->{}", a.object, a.field)
+                }
+            }
             ExprKind::Error => write!(f, "ERROR"),
         }
     }

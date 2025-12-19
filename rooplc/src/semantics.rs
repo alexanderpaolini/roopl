@@ -7,11 +7,8 @@ pub struct ClassType {
     pub name: String,
     pub base: Option<String>,
 
-    pub static_methods: HashMap<String, Type>,
-    pub instance_methods: HashMap<String, Type>,
-
-    pub static_properties: HashMap<String, Type>,
-    pub instance_properties: HashMap<String, Type>,
+    pub static_members: HashMap<String, Type>,
+    pub nonstatic_members: HashMap<String, Type>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,11 +102,15 @@ impl TypeEnv {
         let mut class_type = ClassType {
             name: class.name.clone(),
             base: class.base.clone(),
-            static_methods: HashMap::new(),
-            static_properties: HashMap::new(),
-            instance_methods: HashMap::new(),
-            instance_properties: HashMap::new(),
+            nonstatic_members: HashMap::new(),
+            static_members: HashMap::new(),
         };
+
+        if let Some(base_name) = &class.base {
+            class_type
+                .nonstatic_members
+                .insert("super".to_string(), Type::Class(base_name.clone()));
+        }
 
         for member in &class.members {
             self.process_member(member, &mut class_type);
@@ -126,29 +127,20 @@ impl TypeEnv {
     }
 
     fn process_property(&mut self, prop: &ast::PropertyMember, class_type: &mut ClassType) {
-        if prop.is_static {
-            if class_type.static_properties.contains_key(&prop.name) {
-                self.errors.push(TypeError::DuplicateField {
-                    class: class_type.name.clone(),
-                    field: prop.name.clone(),
-                });
-                return;
-            }
-            class_type
-                .static_properties
-                .insert(prop.name.clone(), Type::new(prop.ty.clone()));
+        let members = if prop.is_static {
+            &mut class_type.static_members
         } else {
-            if class_type.instance_properties.contains_key(&prop.name) {
-                self.errors.push(TypeError::DuplicateField {
-                    class: class_type.name.clone(),
-                    field: prop.name.clone(),
-                });
-                return;
-            }
-            class_type
-                .instance_properties
-                .insert(prop.name.clone(), Type::new(prop.ty.clone()));
+            &mut class_type.nonstatic_members
+        };
+
+        if members.contains_key(&prop.name) {
+            self.errors.push(TypeError::DuplicateField {
+                class: class_type.name.clone(),
+                field: prop.name.clone(),
+            });
+            return;
         }
+        members.insert(prop.name.clone(), Type::new(prop.ty.clone()));
     }
 
     fn process_method(&mut self, meth: &ast::MethodMember, class_type: &mut ClassType) {
@@ -161,25 +153,20 @@ impl TypeEnv {
             return_type: Box::new(Type::new(meth.return_type.clone())),
         };
 
-        if meth.is_static {
-            if class_type.static_methods.contains_key(&meth.name) {
-                self.errors.push(TypeError::DuplicateMethod {
-                    class: class_type.name.clone(),
-                    method: meth.name.clone(),
-                });
-                return;
-            }
-            class_type.static_methods.insert(meth.name.clone(), sig);
+        let props = if meth.is_static {
+            &mut class_type.static_members
         } else {
-            if class_type.instance_methods.contains_key(&meth.name) {
-                self.errors.push(TypeError::DuplicateMethod {
-                    class: class_type.name.clone(),
-                    method: meth.name.clone(),
-                });
-                return;
-            }
-            class_type.instance_methods.insert(meth.name.clone(), sig);
+            &mut class_type.nonstatic_members
+        };
+
+        if props.contains_key(&meth.name) {
+            self.errors.push(TypeError::DuplicateMethod {
+                class: class_type.name.clone(),
+                method: meth.name.clone(),
+            });
+            return;
         }
+        props.insert(meth.name.clone(), sig);
     }
 
     fn print_errors(&self) -> Result<(), ()> {
@@ -194,6 +181,7 @@ impl TypeEnv {
     }
 }
 
+#[derive(Debug)]
 pub struct SymbolTable {
     scopes: Vec<HashMap<String, Type>>,
 }
@@ -234,6 +222,7 @@ impl SymbolTable {
     }
 }
 
+#[derive(Debug)]
 pub struct TypeCheck {
     errors: Vec<TypeError>,
     te: TypeEnv,
@@ -279,6 +268,14 @@ impl TypeCheck {
         self.st.push();
         self.st
             .insert("this".to_string(), Type::Class(class_name.to_string()));
+
+        if let Some(class_type) = self.te.classes.get(class_name) {
+            if let Some(base) = &class_type.base {
+                self.st
+                    .insert("super".to_string(), Type::Class(base.clone()));
+            }
+        }
+
         for param in &meth.params {
             self.st
                 .insert(param.name.clone(), Type::new(param.ty.clone()));
@@ -391,6 +388,9 @@ impl TypeCheck {
             ast::ExprKind::Variable(name) => {
                 let ty = self.st.get(name);
                 if ty == Type::Error {
+                    if self.te.classes.contains_key(name) {
+                        return Type::Class(name.clone());
+                    }
                     self.errors.push(TypeError::UndefinedVariable(name.clone()));
                 }
                 ty
@@ -552,10 +552,24 @@ impl TypeCheck {
 
     fn check_access(&mut self, access: &ast::AccessExpr) -> Type {
         let object_type = self.check_expr(&access.object);
-
         if let Type::Class(class_name) = object_type {
             if let Some(class_type) = self.te.classes.get(&class_name) {
-                if let Some(field_type) = class_type.instance_properties.get(&access.field) {
+                let props = if access.is_static {
+                    &class_type.static_members
+                } else {
+                    &class_type.nonstatic_members
+                };
+
+                println!(
+                    "Accessing field '{}' in class '{}'",
+                    access.field, class_name
+                );
+
+                if let Some(field_type) = props.get(&access.field) {
+                    println!(
+                        "Accessing field '{}' in class '{}'",
+                        access.field, class_name
+                    );
                     field_type.clone()
                 } else {
                     self.errors.push(TypeError::UndefinedField {
@@ -601,9 +615,10 @@ pub fn check(ast: ast::Program) -> Result<(), Vec<TypeError>> {
     te.process(&ast)?;
 
     let mut tc = TypeCheck::new(te);
-    tc.process(&ast)?;
+    let x = tc.process(&ast);
+    println!("{:#?}", tc);
 
-    Ok(())
+    x
 }
 
 #[cfg(test)]
@@ -646,10 +661,10 @@ mod tests {
 
         assert!(result.is_ok());
         let class = tc.classes.get("A").unwrap();
-        assert!(class.static_properties.contains_key("x"));
-        assert!(class.instance_properties.contains_key("y"));
-        assert!(class.static_methods.contains_key("foo"));
-        assert!(class.instance_methods.contains_key("bar"));
+        assert!(class.static_members.contains_key("x"));
+        assert!(class.nonstatic_members.contains_key("y"));
+        assert!(class.static_members.contains_key("foo"));
+        assert!(class.nonstatic_members.contains_key("bar"));
         assert!(tc.errors.is_empty());
     }
 
