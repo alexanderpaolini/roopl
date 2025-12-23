@@ -1,9 +1,9 @@
 import Square;
 
 class Main {
-  static main (argc : int, args : Array) : int
-  {
-    Square x = Square.init(5);
-    return 0;
-  }
+    static main (argc : int, args : Array) : int
+    {
+        Square x = Square.init(5);
+        return 0;
+    }
 }
