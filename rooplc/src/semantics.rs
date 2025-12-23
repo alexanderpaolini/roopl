@@ -136,6 +136,28 @@ impl TypeCheck {
     }
 
     fn process_class(&mut self, class: &ast::ClassDecl) {
+        if let Some(base_name) = &class.base {
+            let mut current_base = Some(base_name.clone());
+            let mut visited = std::collections::HashSet::new();
+            visited.insert(class.name.clone());
+
+            while let Some(base) = current_base {
+                if visited.contains(&base) {
+                    self.errors
+                        .push(TypeError::CyclicInheritance(visited.into_iter().collect()));
+                    return;
+                }
+                visited.insert(base.clone());
+
+                if let Some(base_class) = self.te.classes.get(&base) {
+                    current_base = base_class.base.clone();
+                } else {
+                    self.errors.push(TypeError::UndefinedClass(base));
+                    return;
+                }
+            }
+        }
+
         for member in &class.members {
             match member {
                 ast::ClassMember::Property(property_member) => {
