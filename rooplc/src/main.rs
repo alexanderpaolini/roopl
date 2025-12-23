@@ -5,7 +5,9 @@ mod lex;
 mod parse;
 mod resolver;
 mod semantics;
+mod symbol_table;
 mod token;
+mod types;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

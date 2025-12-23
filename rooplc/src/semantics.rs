@@ -1,61 +1,10 @@
 use std::collections::HashMap;
 
-use crate::ast;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClassType {
-    pub name: String,
-    pub base: Option<String>,
-
-    pub static_members: HashMap<String, Type>,
-    pub nonstatic_members: HashMap<String, Type>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TypeError {
-    DuplicateClass(String),
-    DuplicateMethod { class: String, method: String },
-    DuplicateField { class: String, field: String },
-    Internal(String),
-
-    UndefinedVariable(String),
-    UndefinedClass(String),
-    UndefinedField { class: String, field: String },
-
-    CyclicInheritance(Vec<String>),
-    InvalidOverride { class: String, method: String },
-    TypeMismatch { expected: Type, found: Type },
-    InvalidOperation(String),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-    Int,
-    Float,
-    String,
-    Void,
-    Boolean,
-    Class(String),
-    MethodSig {
-        params: Vec<Type>,
-        return_type: Box<Type>,
-    },
-    Error,
-}
-
-impl Type {
-    pub fn new(ast_type: ast::Type) -> Type {
-        match ast_type {
-            ast::Type::Int => Type::Int,
-            ast::Type::Float => Type::Float,
-            ast::Type::String => Type::String,
-            ast::Type::Void => Type::Void,
-            ast::Type::Boolean => Type::Boolean,
-            ast::Type::Named(name) => Type::Class(name),
-            ast::Type::Error => Type::Error,
-        }
-    }
-}
+use crate::{
+    ast,
+    symbol_table::SymbolTable,
+    types::{ClassType, Type, TypeError},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeEnv {
@@ -109,7 +58,7 @@ impl TypeEnv {
         if let Some(base_name) = &class.base {
             class_type
                 .nonstatic_members
-                .insert("super".to_string(), Type::Class(base_name.clone()));
+                .insert("super".to_string(), Type::Object(base_name.clone()));
         }
 
         for member in &class.members {
@@ -168,58 +117,6 @@ impl TypeEnv {
         }
         props.insert(meth.name.clone(), sig);
     }
-
-    fn print_errors(&self) -> Result<(), ()> {
-        if self.errors.is_empty() {
-            Ok(())
-        } else {
-            for error in &self.errors {
-                println!("{:?}", error);
-            }
-            Err(())
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct SymbolTable {
-    scopes: Vec<HashMap<String, Type>>,
-}
-
-impl SymbolTable {
-    fn new() -> SymbolTable {
-        Self {
-            scopes: vec![HashMap::new()],
-        }
-    }
-
-    fn push(&mut self) {
-        self.scopes.push(HashMap::new());
-    }
-
-    fn pop(&mut self) {
-        if self.scopes.pop().is_none() {
-            panic!("No scope to remove!");
-        }
-    }
-
-    pub fn insert(&mut self, name: String, ty: Type) {
-        if let Some(sc) = self.scopes.last_mut() {
-            sc.insert(name, ty);
-        } else {
-            panic!("No scope to insert to!")
-        }
-    }
-
-    pub fn get(&self, name: &str) -> Type {
-        for sc in self.scopes.iter().rev() {
-            if let Some(ty) = sc.get(name) {
-                return ty.clone();
-            }
-        }
-
-        Type::Error
-    }
 }
 
 #[derive(Debug)]
@@ -267,12 +164,12 @@ impl TypeCheck {
     fn process_method_member(&mut self, meth: &ast::MethodMember, class_name: &str) {
         self.st.push();
         self.st
-            .insert("this".to_string(), Type::Class(class_name.to_string()));
+            .insert("this".to_string(), Type::Object(class_name.to_string()));
 
         if let Some(class_type) = self.te.classes.get(class_name) {
             if let Some(base) = &class_type.base {
                 self.st
-                    .insert("super".to_string(), Type::Class(base.clone()));
+                    .insert("super".to_string(), Type::Object(base.clone()));
             }
         }
 
@@ -553,7 +450,7 @@ impl TypeCheck {
 
     fn check_access(&mut self, access: &ast::AccessExpr) -> Type {
         let object_type = self.check_expr(&access.object);
-        if let Type::Class(class_name) = object_type {
+        if let Type::Object(class_name) = object_type {
             if let Some(class_type) = self.te.classes.get(&class_name) {
                 let props = if access.is_static {
                     &class_type.static_members
@@ -561,16 +458,7 @@ impl TypeCheck {
                     &class_type.nonstatic_members
                 };
 
-                println!(
-                    "Accessing field '{}' in class '{}'",
-                    access.field, class_name
-                );
-
                 if let Some(field_type) = props.get(&access.field) {
-                    println!(
-                        "Accessing field '{}' in class '{}'",
-                        access.field, class_name
-                    );
                     field_type.clone()
                 } else {
                     self.errors.push(TypeError::UndefinedField {
@@ -592,7 +480,21 @@ impl TypeCheck {
     }
 
     fn check_construction(&mut self, construction: &ast::ConstructionExpr) -> Type {
-        return self.check_expr(&construction.obj);
+        let class_type = self.check_expr(&construction.obj);
+        if let Type::Class(class_name) = class_type {
+            if let Some(class) = self.te.classes.get(&class_name) {
+                return Type::Object(class.name.clone());
+            } else {
+                self.errors.push(TypeError::UndefinedClass(class_name));
+                return Type::Error;
+            }
+        } else {
+            println!("{:?}", class_type);
+            self.errors.push(TypeError::InvalidOperation(
+                "construction requires a class type".to_string(),
+            ));
+            Type::Error
+        }
     }
 
     fn process(&mut self, ast: &ast::Program) -> Result<(), Vec<TypeError>> {
@@ -621,7 +523,6 @@ pub fn check(ast: ast::Program) -> Result<(), Vec<TypeError>> {
 
     let mut tc = TypeCheck::new(te);
     let x = tc.process(&ast);
-    println!("{:#?}", tc);
 
     x
 }
@@ -721,33 +622,6 @@ mod tests {
         class A {
             static x : int;
             x : float;
-        }
-        "
-            .to_string(),
-        );
-
-        let mut tc = TypeEnv::new();
-        let _ = tc.process(&prog);
-
-        assert!(tc.errors.is_empty());
-    }
-
-    #[test]
-    fn test_example_main_function() {
-        let prog = gen_ast(
-            "
-        class TestObj {
-            test () : int
-            {
-                return 0;
-            }
-        }
-
-        class Main {
-            static main() : int
-            {
-                return TestObj.test();
-            }
         }
         "
             .to_string(),

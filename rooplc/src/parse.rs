@@ -1117,7 +1117,7 @@ mod tests {
                     if let ExprKind::Access(AccessExpr {
                         object,
                         field,
-                        is_static,
+                        is_static: _,
                     }) = &callee.kind
                     {
                         if let ExprKind::Variable(name) = &object.kind {
@@ -1140,7 +1140,7 @@ mod tests {
                 if let ExprKind::Access(AccessExpr {
                     object,
                     field,
-                    is_static,
+                    is_static: _,
                 }) = &target.kind
                 {
                     if let ExprKind::Variable(name) = &object.kind {
