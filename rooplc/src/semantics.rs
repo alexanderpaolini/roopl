@@ -401,6 +401,7 @@ impl TypeCheck {
             ast::ExprKind::Call(call) => self.check_call(call),
             ast::ExprKind::Access(access) => self.check_access(access),
             ast::ExprKind::Error => Type::Error,
+            ast::ExprKind::Construction(construction) => self.check_construction(construction),
         }
     }
 
@@ -590,6 +591,10 @@ impl TypeCheck {
         }
     }
 
+    fn check_construction(&mut self, construction: &ast::ConstructionExpr) -> Type {
+        return self.check_expr(&construction.obj);
+    }
+
     fn process(&mut self, ast: &ast::Program) -> Result<(), Vec<TypeError>> {
         for item in &ast.items {
             match item {
@@ -716,6 +721,33 @@ mod tests {
         class A {
             static x : int;
             x : float;
+        }
+        "
+            .to_string(),
+        );
+
+        let mut tc = TypeEnv::new();
+        let _ = tc.process(&prog);
+
+        assert!(tc.errors.is_empty());
+    }
+
+    #[test]
+    fn test_example_main_function() {
+        let prog = gen_ast(
+            "
+        class TestObj {
+            test () : int
+            {
+                return 0;
+            }
+        }
+
+        class Main {
+            static main() : int
+            {
+                return TestObj.test();
+            }
         }
         "
             .to_string(),

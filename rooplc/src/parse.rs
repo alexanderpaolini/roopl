@@ -756,6 +756,11 @@ impl Parser {
     fn parse_primary(&mut self) -> Expr {
         if let Some(tok) = self.peek() {
             match tok.kind {
+                TokenKind::New => {
+                    self.consume();
+                    let obj = Box::new(self.parse_expression());
+                    return self.make_expr(ExprKind::Construction(ConstructionExpr { obj }));
+                }
                 TokenKind::Number => {
                     let value = tok.content.unwrap();
                     if value.contains('.') {
@@ -809,6 +814,7 @@ impl Parser {
                 content: Some("EOF".to_string()),
             }),
         });
+        self.consume();
 
         self.make_error_expr()
     }
@@ -1057,10 +1063,11 @@ mod tests {
     }
 
     #[test]
-    fn test_with_object_access() {
+    fn test_with_object_and_access() {
         let toks = lex("
             class Main {
                 static main (argc: int, args: Array) : int {
+                    Object obj = new Object;
                     obj->method();
                     obj->property = 42.0;
                 }
@@ -1078,10 +1085,34 @@ mod tests {
                 StmtKind::Block(BlockStmt { stmts }) => stmts,
                 _ => panic!("Expected method body to be a block"),
             };
-            assert_eq!(stmts.len(), 2);
+            assert_eq!(stmts.len(), 3);
 
-            // First statement: method call
-            if let StmtKind::Expr(expr) = &stmts[0].kind {
+            if let StmtKind::VarDecl(VarDeclStmt {
+                name,
+                ty,
+                initializer,
+            }) = &stmts[0].kind
+            {
+                assert_eq!(name, "obj");
+                assert!(matches!(ty, Type::Named(t) if t == "Object"));
+                if let Some(init) = initializer {
+                    if let ExprKind::Construction(ConstructionExpr { obj }) = &init.kind {
+                        if let ExprKind::Variable(name) = &obj.kind {
+                            assert_eq!(name, "Object");
+                        } else {
+                            panic!("Expected object construction to reference 'Object'");
+                        }
+                    } else {
+                        panic!("Expected initializer to be object construction");
+                    }
+                } else {
+                    panic!("Expected initializer for object declaration");
+                }
+            } else {
+                panic!("Expected first statement to be object declaration");
+            }
+
+            if let StmtKind::Expr(expr) = &stmts[1].kind {
                 if let ExprKind::Call(CallExpr { callee, .. }) = &expr.kind {
                     if let ExprKind::Access(AccessExpr {
                         object,
@@ -1105,7 +1136,7 @@ mod tests {
                 panic!("Expected first statement to be an expression");
             }
 
-            if let StmtKind::Assignment(AssignmentStmt { target, value }) = &stmts[1].kind {
+            if let StmtKind::Assignment(AssignmentStmt { target, value }) = &stmts[2].kind {
                 if let ExprKind::Access(AccessExpr {
                     object,
                     field,

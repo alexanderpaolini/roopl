@@ -16,6 +16,7 @@ pub struct Expr {
 pub enum ExprKind {
     Literal(Literal),
     Variable(String),
+    Construction(ConstructionExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Grouping(GroupingExpr),
@@ -40,6 +41,11 @@ pub struct BinaryExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroupingExpr {
     pub expr: Box<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstructionExpr {
+    pub obj: Box<Expr>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -365,6 +371,7 @@ impl fmt::Display for BlockStmt {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
+            ExprKind::Construction(c) => write!(f, "new {:?}", c),
             ExprKind::Literal(l) => write!(f, "{:?}", l),
             ExprKind::Variable(n) => write!(f, "{}", n),
             ExprKind::Unary(u) => write!(f, "({:?} {})", u.op, u.expr),

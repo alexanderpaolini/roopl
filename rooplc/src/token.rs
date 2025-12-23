@@ -8,6 +8,7 @@ pub struct Position {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
+    New,
     Minus,
     Plus,
     Star,
